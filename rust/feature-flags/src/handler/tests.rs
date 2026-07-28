@@ -23,8 +23,12 @@ use crate::{
         flag_service::FlagService,
     },
     handler::{
-        apply_minimal_flag_called_events, decoding, evaluation::evaluate_feature_flags,
-        flags::fetch_and_filter, properties, FeatureFlagEvaluationContext,
+        apply_minimal_flag_called_events,
+        canonical_log::{run_with_canonical_log, FlagsCanonicalLogLine},
+        decoding,
+        evaluation::evaluate_feature_flags,
+        flags::fetch_and_filter,
+        properties, FeatureFlagEvaluationContext,
     },
     mock,
     properties::property_models::PropertyType,
@@ -176,29 +180,51 @@ fn test_geoip_person_property_overrides(
     }
 }
 
-#[rstest]
-#[case("$geoip_country_code")]
-#[case("$geoip_country_name")]
-fn test_supplied_geoip_properties_win_over_lookup(#[case] key: &str) {
+#[test]
+fn test_supplied_geoip_properties_win_over_lookup() {
     let geoip_service = create_test_geoip_service();
     let ip = IpAddr::V4(Ipv4Addr::new(8, 8, 8, 8));
-
-    let resolved = properties::get_person_property_overrides(false, None, &ip, &geoip_service)
-        .expect("expected geoip to resolve for a public IP");
-    assert!(resolved.contains_key(key), "test IP should resolve {key}");
-
     let supplied = Value::String("supplied-by-caller".to_string());
+
     let result = properties::get_person_property_overrides(
         false,
-        Some(HashMap::from([(key.to_string(), supplied.clone())])),
+        Some(HashMap::from([(
+            "$geoip_country_code".to_string(),
+            supplied.clone(),
+        )])),
         &ip,
         &geoip_service,
     )
     .expect("expected property overrides");
 
-    assert_eq!(result.get(key), Some(&supplied));
-    // The rest of the lookup still fills gaps, so nothing else is lost.
-    assert_eq!(result.len(), resolved.len());
+    assert_eq!(result.get("$geoip_country_code"), Some(&supplied));
+    assert!(result.contains_key("$geoip_country_name"));
+}
+
+#[rstest]
+#[case(true, true)]
+#[case(false, false)]
+#[tokio::test]
+async fn test_canonical_log_records_skipped_geoip_properties(
+    #[case] supply_colliding_key: bool,
+    #[case] expected: bool,
+) {
+    let geoip_service = create_test_geoip_service();
+    let ip = IpAddr::V4(Ipv4Addr::new(8, 8, 8, 8));
+    let person_properties = supply_colliding_key.then(|| {
+        HashMap::from([(
+            "$geoip_country_code".to_string(),
+            Value::String("supplied-by-caller".to_string()),
+        )])
+    });
+
+    let log = FlagsCanonicalLogLine::new(Uuid::new_v4(), ip.to_string());
+    let (_, final_log) = run_with_canonical_log(log, async {
+        properties::get_person_property_overrides(false, person_properties, &ip, &geoip_service)
+    })
+    .await;
+
+    assert_eq!(final_log.geoip_properties_not_applied, expected);
 }
 
 #[tokio::test]

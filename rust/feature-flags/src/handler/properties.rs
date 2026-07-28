@@ -3,13 +3,14 @@ use crate::{
     metrics::consts::GEOIP_PROPERTIES_NOT_APPLIED_COUNTER,
 };
 use common_geoip::GeoIpClient;
-use metrics::counter;
+use common_metrics::inc;
 use serde_json::Value;
 use std::{
     collections::{hash_map::Entry, HashMap},
     net::IpAddr,
 };
 
+use super::canonical_log::with_canonical_log;
 use super::types::{RequestContext, RequestPropertyOverrides};
 
 pub fn prepare_overrides(
@@ -51,54 +52,44 @@ pub fn prepare_overrides(
 /// Builds the person property overrides for a request, filling in GeoIP-derived properties
 /// unless GeoIP is disabled.
 ///
-/// GeoIP only fills gaps: a `$geoip_*` key the caller sent explicitly is kept as-is. We
-/// geolocate the IP the request came from, which for a server-side call is the caller's own
-/// server rather than the end user — so a caller that resolved geo itself (e.g. from request
-/// headers during SSR) knows better than we do. This also keeps precedence consistent with
-/// database person properties, which request overrides already win over.
+/// GeoIP only fills gaps: a `$geoip_*` key the caller sent explicitly is kept as-is, because the
+/// IP we geolocate is whoever made the HTTP request. Under server-side evaluation that's the
+/// caller's own server, so a caller that resolved geo itself is the authority for those keys.
 pub fn get_person_property_overrides(
     geoip_disabled: bool,
     person_properties: Option<HashMap<String, Value>>,
     ip: &IpAddr,
     geoip_service: &GeoIpClient,
 ) -> Option<HashMap<String, Value>> {
-    match (!geoip_disabled, person_properties) {
-        (true, Some(mut props)) => {
-            if let Some(geoip_props) = geoip_service.get_geoip_properties(&ip.to_string()) {
-                let mut not_applied = 0;
-                for (key, value) in geoip_props {
-                    match props.entry(key) {
-                        Entry::Vacant(slot) => {
-                            slot.insert(Value::String(value));
-                        }
-                        Entry::Occupied(_) => not_applied += 1,
-                    }
-                }
-                if not_applied > 0 {
-                    counter!(GEOIP_PROPERTIES_NOT_APPLIED_COUNTER).increment(1);
-                }
-            }
-            Some(props)
-        }
-        (true, None) => {
-            if let Some(geoip_props) = geoip_service.get_geoip_properties(&ip.to_string()) {
-                if !geoip_props.is_empty() {
-                    Some(
-                        geoip_props
-                            .into_iter()
-                            .map(|(k, v)| (k, Value::String(v)))
-                            .collect(),
-                    )
-                } else {
-                    None
-                }
-            } else {
-                None
-            }
-        }
-        (false, Some(props)) => Some(props),
-        (false, None) => None,
+    if geoip_disabled {
+        return person_properties;
     }
+
+    let geoip_props = geoip_service
+        .get_geoip_properties(&ip.to_string())
+        .unwrap_or_default();
+    if geoip_props.is_empty() {
+        return person_properties;
+    }
+
+    let mut props = person_properties.unwrap_or_default();
+    let mut kept_caller_value = false;
+    for (key, value) in geoip_props {
+        match props.entry(key) {
+            Entry::Vacant(slot) => {
+                slot.insert(Value::String(value));
+            }
+            Entry::Occupied(_) => kept_caller_value = true,
+        }
+    }
+    if kept_caller_value {
+        inc(GEOIP_PROPERTIES_NOT_APPLIED_COUNTER, &[], 1);
+        // The counter is unlabeled, so record the fact per-request too: the canonical log line
+        // carries team_id and lib, which is what makes a spike actionable.
+        with_canonical_log(|log| log.geoip_properties_not_applied = true);
+    }
+
+    Some(props)
 }
 
 pub fn get_group_property_overrides(
