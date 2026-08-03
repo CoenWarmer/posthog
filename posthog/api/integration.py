@@ -756,6 +756,9 @@ class IntegrationSerializer(serializers.ModelSerializer, UserAccessControlSerial
         elif validated_data["kind"] == "aws-s3":
             config = validated_data.get("config", {})
 
+            for key in ("team_id", "created_by", "organization_id"):
+                _ = config.pop(key, None)
+
             get_organization = self.context.get("get_organization")
             if get_organization is None:
                 raise ValidationError("Organization context is missing")
@@ -776,6 +779,9 @@ class IntegrationSerializer(serializers.ModelSerializer, UserAccessControlSerial
 
         elif validated_data["kind"] == "aws-redshift":
             config = validated_data.get("config", {})
+
+            for key in ("team_id", "created_by", "organization_id"):
+                _ = config.pop(key, None)
 
             get_organization = self.context.get("get_organization")
             if get_organization is None:
@@ -799,6 +805,10 @@ class IntegrationSerializer(serializers.ModelSerializer, UserAccessControlSerial
 
         elif validated_data["kind"] == "s3-compatible":
             config = validated_data.get("config", {})
+
+            for key in ("team_id", "created_by"):
+                _ = config.pop(key, None)
+
             try:
                 # SSRF validation of `endpoint_url` happens inside `integration_from_config`.
                 instance = S3CompatibleIntegration.integration_from_config(
