@@ -281,6 +281,9 @@ export interface experimentReplayTabLogicActions {
     selectWatchCard: (card: ExperimentWatchCardApi | null) => {
         card: ExperimentWatchCardApi | null
     }
+    scannerCrossSellClicked: () => {
+        value: true
+    }
     setMetricFilterMode: (mode: ExperimentReplayMetricFilterMode) => {
         mode: ExperimentReplayMetricFilterMode
     }
@@ -397,6 +400,7 @@ export const experimentReplayTabLogic = kea<experimentReplayTabLogicType>([
         selectWatchCard: (card: ExperimentWatchCardApi | null) => ({ card }),
         prefetchSessionContexts: (sessionIds: string[]) => ({ sessionIds }),
         reportTabViewed: true,
+        scannerCrossSellClicked: true,
     }),
     loaders(({ values, props, actions }) => ({
         sessionBucket: [
@@ -945,6 +949,13 @@ export const experimentReplayTabLogic = kea<experimentReplayTabLogicType>([
                 variant_count: values.variantKeys.length,
                 metric_count: values.metricOptions.length,
                 linkable_metric_count: values.metricOptions.filter((option) => !option.unlinkable).length,
+            })
+        },
+        scannerCrossSellClicked: () => {
+            void addProductIntentForCrossSell({
+                from: ProductKey.EXPERIMENTS,
+                to: ProductKey.REPLAY_VISION,
+                intent_context: ProductIntentContext.EXPERIMENT_CREATE_SCANNER,
             })
         },
         prefetchSessionContexts: async ({ sessionIds }, breakpoint) => {
