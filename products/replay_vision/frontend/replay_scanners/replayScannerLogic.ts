@@ -59,6 +59,7 @@ import {
     ExperimentScannerContext,
     parseExperimentScannerParams,
     prefillScannerForExperiment,
+    replaceExperimentExposureFilter,
 } from './experimentTargeting'
 import { clearScannerDraft, readScannerDraft, writeScannerDraft } from './scannerDraft'
 import {
@@ -317,6 +318,9 @@ export interface replayScannerLogicActions {
     copyAllObservationsFinished: () => {
         value: true
     }
+    detachExperimentContext: () => {
+        value: true
+    }
     discardScannerDraft: () => {
         value: true
     }
@@ -459,6 +463,9 @@ export interface replayScannerLogicActions {
     }
     setExperimentContext: (context: ExperimentScannerContext | null) => {
         context: ExperimentScannerContext | null
+    }
+    setExperimentVariantKeys: (variantKeys: string[]) => {
+        variantKeys: string[]
     }
     setObservationDateRange: (
         dateFrom: string | null,
@@ -609,6 +616,8 @@ export const replayScannerLogic = kea<replayScannerLogicType>([
         loadScannerSuccess: (scanner: ReplayScanner) => ({ scanner }),
         loadScannerFailure: true,
         setExperimentContext: (context: ExperimentScannerContext | null) => ({ context }),
+        setExperimentVariantKeys: (variantKeys: string[]) => ({ variantKeys }),
+        detachExperimentContext: true,
         saveAffectedCohort: (tag?: string) => ({ tag }),
         setScannerType: (scannerType: ScannerType) => ({ scannerType }),
         startFromTemplate: (templateKey: string | null) => ({ templateKey }),
@@ -834,6 +843,8 @@ export const replayScannerLogic = kea<replayScannerLogicType>([
             null as ExperimentScannerContext | null,
             {
                 setExperimentContext: (_, { context }) => context,
+                setExperimentVariantKeys: (state, { variantKeys }) => (state ? { ...state, variantKeys } : state),
+                detachExperimentContext: () => null,
             },
         ],
         originalScanner: [
@@ -1320,6 +1331,19 @@ export const replayScannerLogic = kea<replayScannerLogicType>([
                     actions.loadObservations()
                     actions.loadObservationStats()
                 }
+            },
+
+            // The reducer has already stored the new keys; recompile only the managed exposure
+            // filter so filters the user added by hand survive a variant change.
+            setExperimentVariantKeys: () => {
+                const context = values.experimentContext
+                if (!context) {
+                    return
+                }
+                actions.setScannerValue(
+                    'query',
+                    replaceExperimentExposureFilter(values.scanner?.query ?? null, context)
+                )
             },
 
             // Changing type keeps the rest of the form: it spreads `current`, so an experiment
