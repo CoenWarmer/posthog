@@ -845,7 +845,7 @@ export const gatewayServerLogic = kea<gatewayServerLogicType>([
                         values.agentAccessPolicyMap[policy.tool_name] ??
                         defaultAgentGrantPolicy(policy.tool_name, policy.team_state, policy.is_destructive),
                 }))
-            actions.setAgentServerAccess(values.agentAccessSelectedId, values.server.id, true, policies)
+            actions.setAgentServerAccess(values.agentAccessSelectedId, values.server.id, true, 'personal', policies)
         },
         syncScopeFromUrl: async ({ scopeParam }, breakpoint) => {
             await breakpoint(0)
