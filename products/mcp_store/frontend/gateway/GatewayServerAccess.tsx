@@ -154,8 +154,8 @@ export function GatewayAccessSection(): JSX.Element | null {
             </div>
             <div className="text-sm text-secondary">
                 You share your own {server.name} connection, and each teammate shares theirs. Pick whether an agent
-                uses it only for your runs or for every agent run in this project. Teammates never get access to your
-                connection.
+                uses it only for your runs or for every agent run in this project. Teammates can't use the connection
+                directly, but agents can act through it on their runs.
             </div>
 
             {server.agents.length === 0 ? (
