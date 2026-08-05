@@ -60,6 +60,7 @@ import { type UrlSorting, parseCsvParam, parseSortParam, serializeSortParam } fr
 import { clampDurationFilter, durationFilterError } from './durationBounds'
 import {
     ExperimentScannerContext,
+    experimentTargetingFromContext,
     parseExperimentScannerParams,
     prefillScannerForExperiment,
     removeManagedExposureFromQuery,
@@ -1358,7 +1359,24 @@ export const replayScannerLogic = kea<replayScannerLogicType>([
                 }
                 try {
                     const response = await visionScannersRetrieve(String(teamId), props.id)
-                    actions.loadScannerSuccess(scannerFromApi(response))
+                    const scanner = scannerFromApi(response)
+                    actions.loadScannerSuccess(scanner)
+                    // Rebuild the experiment targeting card from the persisted context. Fail-soft:
+                    // a deleted or unreadable experiment just leaves the raw filter editor, which
+                    // still shows the scanner's real query.
+                    const targeting = scanner.experiment_targeting
+                    if (targeting?.experiment_id) {
+                        try {
+                            const experiment = await api.experiments.get(targeting.experiment_id)
+                            actions.setExperimentContext({
+                                experiment,
+                                variantKeys: targeting.variant_keys ?? [],
+                                useExposureFallback: targeting.use_exposure_fallback ?? false,
+                            })
+                        } catch {
+                            // Deliberately silent: the scanner loaded fine, only the friendly editor degrades.
+                        }
+                    }
                 } catch (error: any) {
                     lemonToast.error(`Failed to load scanner${error.detail ? `: ${error.detail}` : ''}`)
                     actions.loadScannerFailure()
@@ -1391,6 +1409,7 @@ export const replayScannerLogic = kea<replayScannerLogicType>([
                         'query',
                         replaceExperimentExposureFilter(values.scanner?.query ?? null, context)
                     )
+                    actions.setScannerValue('experiment_targeting', experimentTargetingFromContext(context))
                 } catch (error: any) {
                     lemonToast.error(`Couldn't load the experiment${error?.detail ? `: ${error.detail}` : ''}`)
                 }
@@ -1408,6 +1427,7 @@ export const replayScannerLogic = kea<replayScannerLogicType>([
                     'query',
                     removeManagedExposureFromQuery(values.scanner?.query ?? null, context.experiment)
                 )
+                actions.setScannerValue('experiment_targeting', null)
                 actions.detachExperimentContext()
             },
 
@@ -1422,6 +1442,7 @@ export const replayScannerLogic = kea<replayScannerLogicType>([
                     'query',
                     replaceExperimentExposureFilter(values.scanner?.query ?? null, context)
                 )
+                actions.setScannerValue('experiment_targeting', experimentTargetingFromContext(context))
             },
 
             // Changing type keeps the rest of the form: it spreads `current`, so an experiment
