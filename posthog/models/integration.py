@@ -4533,7 +4533,7 @@ def _return_non_empty_str_from_config(
 ) -> str:
     if (value := config.get(key)) is not None and isinstance(value, str) and len(value) > 0:
         return value
-    raise IntegrationError(f"{friendly_name} is required for an {kind} integration")
+    raise IntegrationError(f"{friendly_name} is required for {kind} integration")
 
 
 def _return_non_empty_str_from_config_for_aws(config: Mapping, key: str, friendly_name: str) -> str:
@@ -4583,7 +4583,7 @@ class AWSRoleBasedIntegration:
     def __init__(self, integration: Integration) -> None:
         if integration.kind != self.integration_kind:
             raise IntegrationError(
-                "Integration provided is not the expected AWS integration"
+                "Integration provided is not the expected AWS integration "
                 f"(got kind='{integration.kind}', expected kind='{self.integration_kind}')"
             )
         self.integration = integration
@@ -4645,7 +4645,7 @@ class AWSCredentialsIntegration:
     def __init__(self, integration: Integration) -> None:
         if integration.kind != self.integration_kind:
             raise IntegrationError(
-                "Integration provided is not the expected AWS integration"
+                "Integration provided is not the expected AWS integration "
                 f"(got kind='{integration.kind}', expected kind='{self.integration_kind}')"
             )
         self.integration = integration
@@ -5019,7 +5019,7 @@ class PostgreSQLServerIntegration:
     def __init__(self, integration: Integration) -> None:
         if integration.kind != self.integration_kind:
             raise IntegrationError(
-                "Integration provided is not the expected PostgreSQL server integration"
+                "Integration provided is not the expected PostgreSQL server integration "
                 f"(got kind='{integration.kind}', expected kind='{self.integration_kind}')"
             )
 
