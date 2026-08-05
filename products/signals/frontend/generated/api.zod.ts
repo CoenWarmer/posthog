@@ -341,6 +341,7 @@ export const signalsScoutCreateBodyConfigOneRunCronScheduleMax = 100
 export const signalsScoutCreateBodyConfigOneModelMax = 200
 
 export const signalsScoutCreateBodyConfigOneTagsMax = 10
+export const signalsScoutCreateBodyConfigOneMcpGatewayServerIdsMax = 100
 
 export const SignalsScoutCreateBody = /* @__PURE__ */ zod
     .object({
@@ -463,6 +464,12 @@ export const SignalsScoutCreateBody = /* @__PURE__ */ zod
                     .nullish()
                     .describe(
                         'Optional JSON Schema (draft 2020-12) describing ONE structured record this scout produces via `scout-record-output` — e.g. a per-report quality judgment (`{\"type\": \"object\", \"properties\": {\"verdict\": {\"enum\": [\"good\", \"bad\", \"unsure\"]}, \"reason\": {\"type\": \"string\"}}, \"required\": [\"verdict\", \"reason\"]}`). The root must be `\"type\": \"object\"`. Setting a schema turns the structured-output channel on: the run prompt renders the schema and every submitted record is validated against it and recorded in the project as a `$scout_structured_output` event, queryable like any event. The channel also requires emit — a dry-run scout has nowhere to record to. Cardinality is the scout\'s call (one record per run, one per judged entity, ...). Null = channel off. Setting a schema requires skill-authoring authorization (the `llm_skill:write` scope and skill editor access) since the scout reads it verbatim in its prompt; clearing it needs only the config write. Records validate against the schema in force when the run was dispatched.'
+                mcp_gateway_server_ids: zod
+                    .array(zod.uuid())
+                    .max(signalsScoutCreateBodyConfigOneMcpGatewayServerIdsMax)
+                    .optional()
+                    .describe(
+                        "MCP gateway servers (by id) this scout's runs may use, chosen from the connections its creator shared with the Scout agent. Selection is per scout: an empty list mounts none of the creator's connections. Connections teammates shared to the whole team are not gated by this list. Applies from the scout's next run."
                     ),
             })
             .describe('Schedule, enablement, and delivery options accepted while creating a scout.')
@@ -487,6 +494,7 @@ export const signalsScoutConfigCreateBodyRunCronScheduleMax = 100
 export const signalsScoutConfigCreateBodyModelMax = 200
 
 export const signalsScoutConfigCreateBodyTagsMax = 10
+export const signalsScoutConfigCreateBodyMcpGatewayServerIdsMax = 100
 
 export const signalsScoutConfigCreateBodySkillNameMax = 200
 
@@ -572,6 +580,12 @@ export const SignalsScoutConfigCreateBody = /* @__PURE__ */ zod
             .nullish()
             .describe(
                 'Optional JSON Schema (draft 2020-12) describing ONE structured record this scout produces via `scout-record-output` — e.g. a per-report quality judgment (`{\"type\": \"object\", \"properties\": {\"verdict\": {\"enum\": [\"good\", \"bad\", \"unsure\"]}, \"reason\": {\"type\": \"string\"}}, \"required\": [\"verdict\", \"reason\"]}`). The root must be `\"type\": \"object\"`. Setting a schema turns the structured-output channel on: the run prompt renders the schema and every submitted record is validated against it and recorded in the project as a `$scout_structured_output` event, queryable like any event. The channel also requires emit — a dry-run scout has nowhere to record to. Cardinality is the scout\'s call (one record per run, one per judged entity, ...). Null = channel off. Setting a schema requires skill-authoring authorization (the `llm_skill:write` scope and skill editor access) since the scout reads it verbatim in its prompt; clearing it needs only the config write. Records validate against the schema in force when the run was dispatched.'
+        mcp_gateway_server_ids: zod
+            .array(zod.uuid())
+            .max(signalsScoutConfigCreateBodyMcpGatewayServerIdsMax)
+            .optional()
+            .describe(
+                "MCP gateway servers (by id) this scout's runs may use, chosen from the connections its creator shared with the Scout agent. Selection is per scout: an empty list mounts none of the creator's connections. Connections teammates shared to the whole team are not gated by this list. Applies from the scout's next run."
             ),
         skill_name: zod
             .string()
@@ -598,6 +612,7 @@ export const signalsScoutConfigUpdateBodyOutputDestinationsOneSlackOneChannelMax
 export const signalsScoutConfigUpdateBodyModelMax = 200
 
 export const signalsScoutConfigUpdateBodyTagsMax = 10
+export const signalsScoutConfigUpdateBodyMcpGatewayServerIdsMax = 100
 
 export const SignalsScoutConfigUpdateBody = /* @__PURE__ */ zod
     .object({
@@ -688,6 +703,12 @@ export const SignalsScoutConfigUpdateBody = /* @__PURE__ */ zod
             .optional()
             .describe(
                 'Free-form labels for grouping the fleet, e.g. `[\"revenue\", \"on-call\"]`. Normalized to lowercase kebab-case (`On Call` and `on_call` both become `on-call`), deduped, and stored sorted; at most 10 tags, each at most 50 characters once normalized. Pass the full desired set — a write replaces the existing tags rather than merging into them. Filter the config list with the `tags` query parameter.'
+        mcp_gateway_server_ids: zod
+            .array(zod.uuid())
+            .max(signalsScoutConfigUpdateBodyMcpGatewayServerIdsMax)
+            .optional()
+            .describe(
+                "MCP gateway servers (by id) this scout's runs may use, chosen from the connections its creator shared with the Scout agent. Selection is per scout: an empty list mounts none of the creator's connections. Connections teammates shared to the whole team are not gated by this list. Applies from the scout's next run."
             ),
     })
     .describe('Editable schedule, enablement, and emit posture for one scout config.')
