@@ -4316,6 +4316,9 @@ class TestGitLabIntegrationSSRFProtection:
     ]
 )
 class TestPostgreSQLIntegrationModel(BaseTest):
+    integration_kind: Integration.IntegrationKind
+    integration_cls: type[RedshiftIntegration] | type[PostgreSQLIntegration]
+
     @parameterized.expand(
         [
             (
