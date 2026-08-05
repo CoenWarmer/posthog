@@ -30,6 +30,7 @@ import {
     SIGNALS_SCOUT_SKILL_PREFIX,
 } from '../../../utils/scoutRunsWindow'
 import { MAX_SCOUT_TAGS, normalizeScoutTags } from '../../../utils/scoutTags'
+import { ScoutMcpServersPicker } from './ScoutMcpServersPicker'
 import { ScoutSlackDestination } from './ScoutSlackDestination'
 
 export interface ScoutCreateModalProps {
@@ -234,6 +235,8 @@ export function ScoutCreateModal({ isOpen, onClose, initialValues, onCreated }: 
                             )}
                         </LemonField>
                     </div>
+
+                    <ScoutMcpServersPicker />
                 </div>
             </Form>
         </LemonModal>
