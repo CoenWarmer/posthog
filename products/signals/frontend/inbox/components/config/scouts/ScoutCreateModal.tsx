@@ -174,6 +174,8 @@ export function ScoutCreateModal({ isOpen, onClose, initialValues, onCreated }: 
                         />
                     </LemonField>
 
+                    <ScoutMcpServersPicker />
+
                     <div className="flex flex-col gap-3 border-t border-primary pt-4">
                         <span className="font-medium text-sm">Run settings</span>
                         <LemonField.Pure
@@ -235,8 +237,6 @@ export function ScoutCreateModal({ isOpen, onClose, initialValues, onCreated }: 
                             )}
                         </LemonField>
                     </div>
-
-                    <ScoutMcpServersPicker />
                 </div>
             </Form>
         </LemonModal>
