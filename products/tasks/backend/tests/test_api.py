@@ -5462,10 +5462,20 @@ class TestTaskRunAPI(BaseTaskAPITest):
         # The typed message first, so rehydration drops it with the rest of the pre-clear side.
         self.assertEqual(entries[0]["method"], "session/update")
         self.assertEqual(entries[0]["params"]["update"]["content"]["text"], "/clear")
+        # The desktop client renders user turns from session/prompt requests and drops raw
+        # user_message_chunks; this tag tells its log replay to promote the chunk into one.
+        self.assertEqual(entries[0]["params"]["update"]["_meta"], {"importedUserPrompt": True})
         self.assertEqual(entries[1]["method"], "_posthog/conversation_cleared")
         # No agent session stands behind this marker, and resume reads sessionId to pick the
         # session it continues — carrying one would resume the conversation just cleared.
         self.assertNotIn("sessionId", entries[1]["params"])
+
+        # A repeat clear with nothing recorded since must not stack another boundary.
+        response = self.client.post(f"/api/projects/@current/tasks/{task.id}/runs/{run.id}/clear_conversation/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        log_content = object_storage.read(run.log_url)
+        assert log_content is not None
+        self.assertEqual(len(log_content.strip().split("\n")), 2)
 
     @parameterized.expand([("queued", TaskRun.Status.QUEUED), ("in_progress", TaskRun.Status.IN_PROGRESS)])
     def test_clear_conversation_rejects_an_active_run(self, _name, run_status):

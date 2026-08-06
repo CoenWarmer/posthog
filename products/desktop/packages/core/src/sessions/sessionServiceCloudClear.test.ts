@@ -93,10 +93,12 @@ describe("SessionService /clear on a finished cloud run", () => {
     expect(runTaskInCloud).not.toHaveBeenCalled();
 
     // A finished run streams nothing back, so the thread is painted from here.
+    // The user message must be a session/prompt request: the renderer drops raw
+    // user_message_chunks, so painting one would show only the divider.
     const [, events] = appendEvents.mock.calls[0];
     expect(
       events.map((e: { message: { method: string } }) => e.message.method),
-    ).toEqual(["session/update", POSTHOG_NOTIFICATIONS.CONVERSATION_CLEARED]);
+    ).toEqual(["session/prompt", POSTHOG_NOTIFICATIONS.CONVERSATION_CLEARED]);
   });
 
   it("resumes into a new run when the agent cannot honour the boundary", async () => {

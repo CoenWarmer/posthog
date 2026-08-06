@@ -3445,7 +3445,17 @@ export class PostHogAPIClient {
       path,
     });
     if (!response.ok) {
-      throw new Error(`Failed to clear conversation: ${response.statusText}`);
+      const err = (await response.json().catch(() => ({}))) as {
+        error?: unknown;
+        detail?: unknown;
+      };
+      const reason =
+        typeof err.error === "string"
+          ? err.error
+          : typeof err.detail === "string"
+            ? err.detail
+            : response.statusText;
+      throw new Error(`Failed to clear conversation: ${reason}`);
     }
   }
 

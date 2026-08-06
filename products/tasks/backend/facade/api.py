@@ -2448,9 +2448,16 @@ def clear_task_run_conversation(
     run = _get_visible_run(run_id, task_id, team_id)
     if run is None:
         return "not_found", None
-    if not run.is_terminal:
-        return "not_terminal", None
-    run.emit_conversation_cleared()
+    with transaction.atomic():
+        # Hold the row lock across the append: resume_task_run_in_cloud locks this same
+        # row to flip a finished run back to QUEUED, so locking here keeps the terminal
+        # check true while the boundary is written, and serializes concurrent clears so
+        # the dedup in emit_conversation_cleared holds. The block writes nothing to
+        # Postgres; the lock is mutual exclusion only.
+        run = _task_run_queryset().select_for_update(of=("self",)).get(pk=run.pk)
+        if not run.is_terminal:
+            return "not_terminal", None
+        run.emit_conversation_cleared()
     return "cleared", _task_run_detail_to_dto(run)
 
 

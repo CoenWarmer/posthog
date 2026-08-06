@@ -145,7 +145,13 @@ const SESSION_EVENT_EVICT_GRACE_MS = 20_000;
  */
 const OPEN_TAIL_BYTES = 1_500_000;
 
-/** Matches a bare `/clear` invocation, not a longer command that starts with it. */
+/**
+ * Matches a leading `/clear` command the way the agent's own detection does
+ * (`leadingSlashCommand` in the claude adapter): a longer command such as
+ * `/clearcache` doesn't match, and trailing text doesn't change the command,
+ * so the finished-run shortcut and a live agent treat the same message the
+ * same way.
+ */
 function isClearCommand(text: string | undefined): boolean {
   return /^\/clear(?:\s|$)/.test(text ?? "");
 }
@@ -4447,10 +4453,14 @@ export class SessionService {
     if (!client) {
       throw new Error("Authentication required for cloud commands");
     }
+    this.d.log.info("Clearing cloud conversation", {
+      taskId: session.taskId,
+      taskRunId: session.taskRunId,
+    });
     await client.clearTaskRunConversation(session.taskId, session.taskRunId);
     this.d.store.appendEvents(
       session.taskRunId,
-      createConversationClearedEvents(session.taskRunId, Date.now()),
+      createConversationClearedEvents(Date.now()),
     );
     return { stopReason: "end_turn" };
   }

@@ -83,8 +83,9 @@ function storedEntryToAcpMessage(
  * A typed user prompt replayed from an imported Claude Code session arrives as
  * a `user_message_chunk` tagged with `_meta.importedUserPrompt`. The renderer
  * ignores raw user_message_chunks (live, user turns render from session/prompt
- * requests), so promote the tagged ones into a session/prompt user event. Only
- * affects imported sessions; normal logs carry no such marker.
+ * requests), so promote the tagged ones into a session/prompt user event.
+ * Imported sessions and the backend-recorded `/clear` on a finished cloud run
+ * carry the tag; normal logs don't.
  */
 function promoteImportedUserPrompt(
   entry: StoredLogEntry,
@@ -136,34 +137,18 @@ export function createUserMessageEvent(text: string, ts: number): AcpMessage {
 }
 
 /**
- * The two frames a `/clear` on a finished cloud run produces, in log order: the
+ * The two frames a `/clear` on a finished cloud run paints, in thread order: the
  * message the user typed, then the boundary rehydration stops at.
  *
- * The backend writes these into the run log (there is no sandbox to emit them),
- * and mirrors this shape — a finished run has no live stream to echo them back,
- * so the client paints them from here and a later reload folds the persisted
- * copies into the same thread.
+ * The backend writes the same pair into the run log (there is no sandbox to emit
+ * them). The painted user message is a `session/prompt` request because that is
+ * the shape the renderer displays; the persisted copy is a `user_message_chunk`
+ * tagged `importedUserPrompt`, which log replay promotes back into this same
+ * request shape (see {@link promoteImportedUserPrompt}).
  */
-export function createConversationClearedEvents(
-  sessionId: string,
-  ts: number,
-): AcpMessage[] {
+export function createConversationClearedEvents(ts: number): AcpMessage[] {
   return [
-    {
-      type: "acp_message",
-      ts,
-      message: {
-        jsonrpc: "2.0",
-        method: "session/update",
-        params: {
-          sessionId,
-          update: {
-            sessionUpdate: "user_message_chunk",
-            content: { type: "text", text: "/clear" },
-          },
-        },
-      },
-    },
+    createUserMessageEvent("/clear", ts),
     {
       type: "acp_message",
       ts,

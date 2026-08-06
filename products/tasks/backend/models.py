@@ -1,5 +1,6 @@
 import os
 import re
+import json
 import uuid
 import string
 import secrets
@@ -2300,11 +2301,18 @@ class TaskRun(models.Model):
 
         The `/clear` message is recorded ahead of the marker, matching the agent, so the
         transcript shows what the user typed and rehydration drops it with everything
-        else on the pre-clear side.
+        else on the pre-clear side. It carries the `importedUserPrompt` tag because the
+        desktop client renders user turns from `session/prompt` requests and drops raw
+        `user_message_chunk`s; the tag tells its log replay to promote the chunk into one.
 
         The marker carries no `sessionId`: there is no agent session behind it, and
         resume reads that field to decide which session to continue.
+
+        A repeat call while the log already ends at the boundary appends nothing, so a
+        double-submitted or retried clear doesn't stack duplicate markers.
         """
+        if self._log_tail_is_conversation_cleared():
+            return
         timestamp = django_timezone.now().isoformat()
         events = [
             {
@@ -2318,6 +2326,7 @@ class TaskRun(models.Model):
                         "update": {
                             "sessionUpdate": "user_message_chunk",
                             "content": {"type": "text", "text": "/clear"},
+                            "_meta": {"importedUserPrompt": True},
                         },
                     },
                 },
@@ -2335,6 +2344,22 @@ class TaskRun(models.Model):
         self.append_log(events)
         for event in events:
             self.publish_stream_event(event)
+
+    def _log_tail_is_conversation_cleared(self) -> bool:
+        # Reads the whole object because S3 offers no cheap tail read; clears are rare
+        # and the subsequent append re-reads it anyway.
+        content = object_storage.read(self.log_url, missing_ok=True) or ""
+        last_line = content.strip().rsplit("\n", 1)[-1]
+        if not last_line:
+            return False
+        try:
+            entry = json.loads(last_line)
+        except json.JSONDecodeError:
+            return False
+        if not isinstance(entry, dict):
+            return False
+        notification = entry.get("notification")
+        return isinstance(notification, dict) and notification.get("method") == "_posthog/conversation_cleared"
 
     def emit_progress_event(
         self,
