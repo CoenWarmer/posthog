@@ -4,7 +4,6 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("posthog", "1292_oauthaccesstoken_sandbox_task_id"),
     ]
