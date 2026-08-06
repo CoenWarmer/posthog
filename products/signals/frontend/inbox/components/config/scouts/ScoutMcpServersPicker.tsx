@@ -53,6 +53,33 @@ function connectionIssue(connection: GatewayYourConnectionApi): { label: string;
     return null
 }
 
+/**
+ * Why selecting this server can't create the Scout agent grant it needs, mirroring the
+ * states the gateway blocks new agent shares on. Admins see team-disabled and revoked
+ * servers in the list; everyone can hold a connection that is broken or switched off.
+ */
+function scoutShareBlockedReason(server: MCPGatewayServerApi): string | undefined {
+    if (!server.is_team_enabled) {
+        return 'This server is turned off for the team.'
+    }
+    if (server.is_revoked_for_you) {
+        return 'An admin has turned off this server for you.'
+    }
+    if (server.your_connection === null) {
+        return 'Connect this server before this scout can use it.'
+    }
+    if (server.your_connection.needs_reauth) {
+        return 'Reconnect this server before this scout can use it.'
+    }
+    if (server.your_connection.pending_oauth) {
+        return 'Finish connecting this server before this scout can use it.'
+    }
+    if (!server.your_connection.is_enabled) {
+        return 'Enable your connection before this scout can use it.'
+    }
+    return undefined
+}
+
 interface PickerState {
     hiddenCount: number
     initialLoading: boolean
@@ -105,13 +132,19 @@ function SelectSwitch({
     state: PickerState
     selectedServerIds: string[]
 }): JSX.Element {
-    const { serverShareLoadingIds } = useValues(scoutMcpServersLogic)
+    const { scoutSharedServerIds, serverShareLoadingIds } = useValues(scoutMcpServersLogic)
+    const selected = selectedServerIds.includes(server.id)
+    // Only block turning the switch on when that would create a new Scout grant the server
+    // can't back. Selected servers stay deselectable, and already-shared ones need no new grant.
+    const blockedReason = selected || scoutSharedServerIds.has(server.id) ? undefined : scoutShareBlockedReason(server)
     return (
         <LemonSwitch
             size={size}
-            checked={selectedServerIds.includes(server.id)}
+            checked={selected}
             loading={serverShareLoadingIds.has(server.id)}
-            disabledReason={serverShareLoadingIds.has(server.id) ? 'Saving' : state.shareDisabledReason}
+            disabledReason={
+                serverShareLoadingIds.has(server.id) ? 'Saving' : (state.shareDisabledReason ?? blockedReason)
+            }
             onChange={(checked) => state.toggleServer(server.id, checked)}
             aria-label={`Let this scout use ${server.name}`}
         />
