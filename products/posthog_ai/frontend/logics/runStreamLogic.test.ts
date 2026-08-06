@@ -262,6 +262,19 @@ describe('runStreamLogic', () => {
             expect(logic.values.threadItems.some((item) => item.type === 'turn_separator')).toEqual(true)
         })
 
+        it('follows the latest run_started conversationClear advertisement', async () => {
+            // A run served by a capable agent followed by one whose agent does not advertise
+            // the capability (an agent rollback): the gate must drop, or the client records a
+            // clear boundary the current agent ignores on resume.
+            await expectLogic(logic, () => {
+                logic.actions.ingestAcpFrame(notification('_posthog/run_started', { conversationClear: true }))
+            }).toMatchValues({ conversationClearSupported: true })
+
+            await expectLogic(logic, () => {
+                logic.actions.ingestAcpFrame(notification('_posthog/run_started', {}))
+            }).toMatchValues({ conversationClearSupported: false })
+        })
+
         it('sets currentMode on a current_mode_update frame', async () => {
             await expectLogic(logic, () => {
                 logic.actions.ingestAcpFrame(

@@ -1498,8 +1498,8 @@ export interface runStreamLogicActions {
     markPermissionRequestSeen: (requestId: string) => {
         requestId: string
     }
-    markConversationClearSupported: () => {
-        value: true
+    setConversationClearSupported: (supported: boolean) => {
+        supported: boolean
     }
     markRunStarted: () => {
         value: true
@@ -1804,8 +1804,8 @@ export const runStreamLogic = kea<runStreamLogicType>([
         /** Optional `task_run_state.stage` — wired for a future richer status surface (G6). */
         setCurrentStage: (stage: string | null) => ({ stage }),
         markRunStarted: true,
-        /** Records the agent's `/clear` capability, read off the `_posthog/run_started` frame. */
-        markConversationClearSupported: true,
+        /** Records the agent's `/clear` capability, read off each `_posthog/run_started` frame. */
+        setConversationClearSupported: (supported: boolean) => ({ supported }),
         markTurnComplete: true,
         /** Echoes the user's own message into the thread as a `client`-sourced log entry (the wire never replays a live turn). */
         pushHumanMessage: (content: string) => ({ content }),
@@ -2081,13 +2081,15 @@ export const runStreamLogic = kea<runStreamLogicType>([
                 reset: () => false,
             },
         ],
-        // Sticky across the resume chain's replay: any run in the chain having been served by a
-        // capable agent is enough, since the next run boots from the same (latest) agent image.
-        // `reset` is deliberately not handled — a re-bootstrap replays run_started and re-derives it.
+        // The latest run_started in the resume chain wins, matching the desktop client: the gate
+        // predicts the next run's agent, and after an agent rollback an earlier capable run must
+        // not authorize recording a boundary the current agent would ignore on resume (the UI
+        // would claim a clear that never happens). `reset` is deliberately not handled: a
+        // re-bootstrap replays the chain's run_started frames and re-derives it.
         conversationClearSupported: [
             false,
             {
-                markConversationClearSupported: () => true,
+                setConversationClearSupported: (_, { supported }) => supported,
             },
         ],
         turnComplete: [
@@ -3159,9 +3161,9 @@ export const runStreamLogic = kea<runStreamLogicType>([
                         cold_start: true,
                     })
                 }
-                if ((notification.params as { conversationClear?: unknown } | undefined)?.conversationClear === true) {
-                    actions.markConversationClearSupported()
-                }
+                actions.setConversationClearSupported(
+                    (notification.params as { conversationClear?: unknown } | undefined)?.conversationClear === true
+                )
                 cache.isBootstrapping = false
                 actions.markRunStarted()
                 return
