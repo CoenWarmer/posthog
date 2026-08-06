@@ -12,6 +12,14 @@ from typing import Any
 # importing this product's workflow and activity modules.
 CHECK_SUITE_WORKFLOW_NAME = "data-quality-run-suite"
 
+# How a materialization should treat this subject's checks, resolved by ``quality_audit_mode``.
+# skip: no runnable checks (or the product flag is off) -- zero overhead, the old path.
+# warn: run checks after publish, fire-and-forget.
+# gate: audit staged data before the publish pointer flip; blocking failures stop the publish.
+QUALITY_AUDIT_SKIP = "skip"
+QUALITY_AUDIT_WARN = "warn"
+QUALITY_AUDIT_GATE = "gate"
+
 
 @dataclass(frozen=True)
 class CheckTypeInfo:

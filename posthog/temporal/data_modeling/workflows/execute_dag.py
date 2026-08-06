@@ -82,6 +82,10 @@ class NodeResult:
     error: str | None = None
     skipped: bool = False
     skip_reason: str | None = None
+    # The node materialized but failing error-severity checks stopped the publish.
+    quality_failed: bool = False
+    # The child ran its own check suite (gate or warn), so the post-DAG sweep must skip it.
+    quality_audited: bool = False
 
 
 @dataclasses.dataclass
@@ -273,6 +277,7 @@ class ExecuteDAGWorkflow(PostHogWorkflow):
         node_results: list[NodeResult] = []
         ephemeral_node_set = set(dag_structure.ephemeral_nodes)
         failed_node_set: set[str] = set()
+        quality_failed_node_set: set[str] = set()
         serving_engine = (
             DataModelingJobEngine.DUCKGRES if inputs.duckgres_only else DataModelingJobEngine.CLICKHOUSE
         ).value
@@ -302,7 +307,12 @@ class ExecuteDAGWorkflow(PostHogWorkflow):
                     for blocked_id in blocked_node_set:
                         if node_id in downstreams[blocked_id]:
                             should_skip = True
-                            verb = "suspended" if blocked_id in suspended_node_set else "failed"
+                            if blocked_id in suspended_node_set:
+                                verb = "suspended"
+                            elif blocked_id in quality_failed_node_set:
+                                verb = "failed data quality checks"
+                            else:
+                                verb = "failed"
                             skip_reason = f"Upstream node {blocked_id} {verb}"
                             break
                 if should_skip:
@@ -355,6 +365,19 @@ class ExecuteDAGWorkflow(PostHogWorkflow):
                     )
                     try:
                         result: MaterializeViewWorkflowResult = await handle
+                        if result.quality_blocking_failures is not None and result.quality_blocking_failures > 0:
+                            temporalio.workflow.logger.warning(
+                                f"Node {node_id} materialized but was not published: "
+                                f"{result.quality_blocking_failures} data quality checks failed",
+                                extra=inputs.properties_to_log,
+                            )
+                            return NodeResult(
+                                node_id=node_id,
+                                success=False,
+                                error=f"Not published: {result.quality_blocking_failures} data quality checks failed",
+                                quality_failed=True,
+                                quality_audited=True,
+                            )
                         temporalio.workflow.logger.info(
                             f"Node {node_id} materialized successfully",
                             extra={"rows_materialized": result.rows_materialized, **inputs.properties_to_log},
@@ -364,6 +387,7 @@ class ExecuteDAGWorkflow(PostHogWorkflow):
                             success=True,
                             rows_materialized=result.rows_materialized,
                             duration_seconds=result.duration_seconds,
+                            quality_audited=result.quality_audited,
                         )
                     except temporalio.exceptions.ChildWorkflowError as e:
                         error_message = str(e.cause) if e.cause else str(e)
@@ -394,6 +418,8 @@ class ExecuteDAGWorkflow(PostHogWorkflow):
                 node_results.append(nr)
                 if not nr.success:
                     failed_node_set.add(nr.node_id)
+                    if nr.quality_failed:
+                        quality_failed_node_set.add(nr.node_id)
 
         # compute summary
         end_time = temporalio.workflow.now()
@@ -443,19 +469,32 @@ class ExecuteDAGWorkflow(PostHogWorkflow):
         )
 
     async def _run_data_quality_checks(self, inputs: ExecuteDAGInputs, node_results: list[NodeResult]) -> None:
-        """Fire the check suite for the models this run actually materialized.
+        """Fire the check suite for the nodes this run refreshed but did not audit per-node.
+
+        Materialized nodes with checks audit themselves inside MaterializeViewWorkflow (gate or
+        warn mode, reported via quality_audited); this sweep covers what per-node auditing cannot:
+        ephemeral (plain-view) nodes, whose data is a live query over the upstreams this run just
+        refreshed, and children on the pre-audit result version.
 
         Best-effort and fully isolated: started by registered name so data_modeling never imports
         the catalog product, and ABANDON so a check suite can neither delay nor fail the DAG. The
-        node ids come from recorded activity results, so replay stays deterministic.
+        node ids come from recorded child results, so replay stays deterministic; the selection
+        change itself is patch-gated because it alters a recorded command's arguments.
         """
-        materialized_node_ids = [
-            result.node_id
-            for result in node_results
-            # rows_materialized is None for ephemeral nodes, which have no table to check.
-            if result.success and not result.skipped and result.rows_materialized is not None
-        ]
-        if not materialized_node_ids:
+        if temporalio.workflow.patched("data-quality-node-audit-2026-08"):
+            node_ids = [
+                result.node_id
+                for result in node_results
+                if result.success and not result.skipped and not result.quality_audited
+            ]
+        else:
+            node_ids = [
+                result.node_id
+                for result in node_results
+                # rows_materialized is None for ephemeral nodes, which have no table to check.
+                if result.success and not result.skipped and result.rows_materialized is not None
+            ]
+        if not node_ids:
             return
 
         try:
@@ -464,7 +503,7 @@ class ExecuteDAGWorkflow(PostHogWorkflow):
                 {
                     "team_id": inputs.team_id,
                     "trigger": "materialization",
-                    "node_ids": materialized_node_ids,
+                    "node_ids": node_ids,
                 },
                 id=f"data-quality-run-suite-{inputs.dag_id}-{temporalio.workflow.info().run_id}",
                 parent_close_policy=ParentClosePolicy.ABANDON,
