@@ -28,6 +28,7 @@ import { teamLogic } from 'scenes/teamLogic'
 import { urls } from 'scenes/urls'
 
 import { SIDE_PANEL_CONTEXT_KEY, SidePanelSceneContext } from '~/layout/navigation-3000/sidepanel/types'
+import { RecordingsQuery } from '~/queries/schema/schema-general'
 
 import {
     visionScannersAffectedCohortCreate,
@@ -93,6 +94,25 @@ const COPY_ALL_OBSERVATIONS_LIMIT = 500
 function currentTemplateKey(): string | null {
     const value = router.values.searchParams.template
     return typeof value === 'string' ? value : null
+}
+
+/**
+ * A `RecordingsQuery` handed to the new-scanner wizard via `?filters=<url-encoded JSON>`, used by
+ * cross-sell entry points (e.g. "save these filters as a scanner" in the replay playlist) to seed
+ * the scanner's query. Returns null on a missing or unparseable param so a malformed link just
+ * opens the blank wizard rather than throwing.
+ */
+function prefillQueryFromUrl(): RecordingsQuery | null {
+    const value = router.values.searchParams.filters
+    if (typeof value !== 'string' || !value) {
+        return null
+    }
+    try {
+        const parsed = JSON.parse(value)
+        return parsed && typeof parsed === 'object' ? (parsed as RecordingsQuery) : null
+    } catch {
+        return null
+    }
 }
 
 function defaultConfigForType(scannerType: ScannerType): ScannerConfig {
@@ -1212,6 +1232,13 @@ export const replayScannerLogic = kea<replayScannerLogicType>([
                     if (urlTemplateKey && !templateKey) {
                         const { template: _drop, ...rest } = router.values.searchParams
                         router.actions.replace(router.values.location.pathname, rest)
+                    }
+                    // A `?filters=` deep link expresses fresh intent (e.g. "save these playlist
+                    // filters as a scanner"), so it seeds the query and outranks a saved draft.
+                    const prefillQuery = prefillQueryFromUrl()
+                    if (prefillQuery) {
+                        actions.loadScannerSuccess({ ...newScanner(templateKey), query: prefillQuery })
+                        return
                     }
                     cache.restoringDraft = true
                     try {

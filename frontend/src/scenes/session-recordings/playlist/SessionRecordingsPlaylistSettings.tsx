@@ -1,5 +1,5 @@
 import { useActions, useValues } from 'kea'
-import { router } from 'kea-router'
+import { combineUrl, router } from 'kea-router'
 import posthog from 'posthog-js'
 
 import { IconChevronRight, IconEllipsis, IconEye, IconInfo, IconPlus, IconSort, IconTrash } from '@posthog/icons'
@@ -13,9 +13,12 @@ import { LemonMenu, LemonMenuItem } from 'lib/lemon-ui/LemonMenu/LemonMenu'
 import { featureFlagLogic } from 'lib/logic/featureFlagLogic'
 import { getAccessControlDisabledReason } from 'lib/utils/accessControlUtils'
 import { matchesConfirmationText } from 'lib/utils/confirmationText'
+import { addProductIntentForCrossSell } from 'lib/utils/product-intents'
 import { sessionRecordingCollectionsLogic } from 'scenes/session-recordings/collections/sessionRecordingCollectionsLogic'
+import { convertUniversalFiltersToRecordingsQuery } from 'scenes/session-recordings/filters/recordingsQueryConversions'
 import { urls } from 'scenes/urls'
 
+import { ProductIntentContext, ProductKey } from '~/queries/schema/schema-general'
 import { AccessControlLevel, AccessControlResourceType, RecordingUniversalFilters } from '~/types'
 
 import { bulkScanLogic } from 'products/replay_vision/frontend/logics/bulkScanLogic'
@@ -550,6 +553,26 @@ export function SessionRecordingsPlaylistTopSettings({
                 key: 'bulk-scan-recordings',
                 label: () => <BulkScanMenuItem />,
                 custom: true,
+            })
+        }
+
+        // Bulk scan runs the current recordings through an existing scanner; this instead turns the
+        // filters into a *new* scanner that keeps watching matching sessions going forward.
+        if (visionEnabled && featureFlags[FEATURE_FLAGS.VISION_ENTRYPOINT_REPLAY_PLAYLIST] && filters) {
+            menuItems.push({
+                label: 'Save as scanner',
+                'data-attr': 'save-filters-as-scanner',
+                onClick: () => {
+                    const query = convertUniversalFiltersToRecordingsQuery(filters)
+                    void addProductIntentForCrossSell({
+                        from: ProductKey.SESSION_REPLAY,
+                        to: ProductKey.REPLAY_VISION,
+                        intent_context: ProductIntentContext.SESSION_REPLAY_SAVE_FILTERS_AS_SCANNER,
+                    })
+                    router.actions.push(
+                        combineUrl(urls.replayVisionScannerConfigure('new'), { filters: JSON.stringify(query) }).url
+                    )
+                },
             })
         }
 
