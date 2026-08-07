@@ -95,7 +95,7 @@ class TestHelpScoutSource:
     )
     def test_validate_credentials_plumbs_arguments(self, mock_validate, mock_get_integration, mock_oauth):
         mock_validate.return_value = (True, None)
-        mock_get_integration.return_value = mock.MagicMock(access_token="token")
+        mock_get_integration.return_value = mock.MagicMock(access_token="token", kind="helpscout")
         mock_oauth.return_value.access_token_expired.return_value = False
 
         is_valid, error_message = self.source.validate_credentials(self.config, self.team_id, schema_name="tags")
@@ -120,10 +120,24 @@ class TestHelpScoutSource:
     @mock.patch(
         "products.warehouse_sources.backend.temporal.data_imports.sources.helpscout.source.HelpScoutSource.get_oauth_integration"
     )
+    def test_integration_of_another_kind_is_rejected(self, mock_get_integration, mock_oauth):
+        # The lookup only scopes to the team, so a config pointing at another provider's
+        # integration must be rejected before its access token is read or refreshed.
+        mock_get_integration.return_value = mock.MagicMock(access_token="token", kind="salesforce")
+
+        with pytest.raises(ValueError, match="Integration not found: 456"):
+            self.source._get_access_token(self.config, self.team_id)
+
+        mock_oauth.assert_not_called()
+
+    @mock.patch("products.warehouse_sources.backend.temporal.data_imports.sources.helpscout.source.OauthIntegration")
+    @mock.patch(
+        "products.warehouse_sources.backend.temporal.data_imports.sources.helpscout.source.HelpScoutSource.get_oauth_integration"
+    )
     def test_expired_token_is_refreshed_before_use(self, mock_get_integration, mock_oauth):
         # Help Scout access tokens last ~2 days, so a source syncing on a stale token would 401
         # mid-run instead of refreshing.
-        mock_get_integration.return_value = mock.MagicMock(access_token="token")
+        mock_get_integration.return_value = mock.MagicMock(access_token="token", kind="helpscout")
         mock_oauth.return_value.access_token_expired.return_value = True
 
         self.source._get_access_token(self.config, self.team_id)
@@ -143,7 +157,7 @@ class TestHelpScoutSource:
     )
     @mock.patch("products.warehouse_sources.backend.temporal.data_imports.sources.helpscout.source.helpscout_source")
     def test_source_for_pipeline_plumbs_arguments(self, mock_helpscout_source, mock_get_integration, mock_oauth):
-        mock_get_integration.return_value = mock.MagicMock(access_token="token")
+        mock_get_integration.return_value = mock.MagicMock(access_token="token", kind="helpscout")
         mock_oauth.return_value.access_token_expired.return_value = False
         inputs = mock.MagicMock()
         inputs.schema_name = "conversations"
@@ -171,7 +185,7 @@ class TestHelpScoutSource:
     def test_source_for_pipeline_omits_last_value_on_full_refresh(
         self, mock_helpscout_source, mock_get_integration, mock_oauth
     ):
-        mock_get_integration.return_value = mock.MagicMock(access_token="token")
+        mock_get_integration.return_value = mock.MagicMock(access_token="token", kind="helpscout")
         mock_oauth.return_value.access_token_expired.return_value = False
         inputs = mock.MagicMock()
         inputs.schema_name = "mailboxes"

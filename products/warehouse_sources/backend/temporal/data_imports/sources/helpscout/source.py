@@ -8,7 +8,7 @@ from posthog.schema import (
     SourceFieldOauthConfig,
 )
 
-from posthog.models.integration import OauthIntegration
+from posthog.models.integration import Integration, OauthIntegration
 
 from products.warehouse_sources.backend.temporal.data_imports.sources.common.base import FieldType, ResumableSource
 from products.warehouse_sources.backend.temporal.data_imports.sources.common.canonical_descriptions import (
@@ -95,6 +95,11 @@ class HelpScoutSource(OAuthMixin, ResumableSource[HelpScoutSourceConfig, HelpSco
 
     def _get_access_token(self, config: HelpScoutSourceConfig, team_id: int) -> str:
         integration = self.get_oauth_integration(config.helpscout_integration_id, team_id)
+        # The lookup only scopes to the team, so a config pointing at some other provider's
+        # integration in the same team would otherwise send that provider's access token to the
+        # Help Scout API. Reject it before the token is read or refreshed.
+        if integration.kind != Integration.IntegrationKind.HELPSCOUT:
+            raise ValueError(f"Integration not found: {config.helpscout_integration_id}")
 
         oauth_integration = OauthIntegration(integration)
         if oauth_integration.access_token_expired():

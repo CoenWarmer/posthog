@@ -76,6 +76,8 @@ def _wire(session: mock.MagicMock, responses: list[Response]) -> tuple[list[str]
     ``prepare_request`` is mocked, which bypasses the auth callable entirely — these tests exercise
     pagination/fan-out/resume, not token minting (covered separately in TestValidateCredentials).
     ``request.params`` is one dict mutated in place across pages, so snapshot a copy per request.
+    The stand-in prepared request carries the real URL string: the client host-checks
+    ``prepared.url`` before sending, and a bare MagicMock there would not be a URL at all.
     """
     session.headers = {}
     url_snapshots: list[str] = []
@@ -84,7 +86,9 @@ def _wire(session: mock.MagicMock, responses: list[Response]) -> tuple[list[str]
     def _prepare(request: Any) -> mock.MagicMock:
         url_snapshots.append(request.url)
         param_snapshots.append(dict(request.params or {}))
-        return mock.MagicMock()
+        prepared = mock.MagicMock()
+        prepared.url = request.url
+        return prepared
 
     session.prepare_request.side_effect = _prepare
     session.send.side_effect = responses
