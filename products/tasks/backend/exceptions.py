@@ -94,6 +94,10 @@ class SandboxProvisionError(ProcessTaskTransientError):
     pass
 
 
+class SandboxNetworkPolicyError(ProcessTaskFatalError):
+    pass
+
+
 class SandboxNotFoundError(ProcessTaskFatalError):
     """Sandbox does not exist."""
 
