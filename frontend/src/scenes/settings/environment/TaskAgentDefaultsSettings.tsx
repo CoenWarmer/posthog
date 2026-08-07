@@ -1,9 +1,11 @@
 import { useActions, useValues } from 'kea'
+import { useMemo } from 'react'
 
 import { LemonButton, LemonSelect } from '@posthog/lemon-ui'
 
 import { modelCatalogueLogic } from 'products/posthog_ai/frontend/logics/modelCatalogueLogic'
 import {
+    filterEffortForModel,
     getEffortLabel,
     getEffortsForModel,
     getModelLabel,
@@ -32,14 +34,18 @@ function PreferenceEditor({
     // Grouped by harness off the same catalogue the composer renders, so a model you can pick for a
     // run is always settable as a default and vice versa — including the Codex models that only
     // Slack and PostHog Code drive today.
-    const modelOptions = listRuntimeAdapters(catalogue).map((adapter) => ({
-        title: getRuntimeAdapterLabel(adapter),
-        options: modelsForRuntimeAdapter(catalogue, adapter).map((choice) => ({
-            value: choice.model,
-            label: choice.display_name,
-        })),
-    }))
-    const effortOptions = getEffortsForModel(catalogue, draft.model)
+    const modelOptions = useMemo(
+        () =>
+            listRuntimeAdapters(catalogue).map((adapter) => ({
+                title: getRuntimeAdapterLabel(adapter),
+                options: modelsForRuntimeAdapter(catalogue, adapter).map((choice) => ({
+                    value: choice.model,
+                    label: choice.display_name,
+                })),
+            })),
+        [catalogue]
+    )
+    const effortOptions = useMemo(() => getEffortsForModel(catalogue, draft.model), [catalogue, draft.model])
 
     return (
         <div className="flex flex-wrap items-center gap-2">
@@ -48,14 +54,11 @@ function PreferenceEditor({
                 onChange={(model) =>
                     onChange({
                         model,
-                        // A model switch may invalidate the picked effort; reset to the server-side default.
+                        // A model switch may invalidate the picked effort; drop it rather than store one
+                        // the model can't run, and let the server-side default apply instead.
                         reasoning_effort:
-                            draft.reasoning_effort &&
-                            model &&
-                            getEffortsForModel(catalogue, model).some(
-                                (option) => option.value === draft.reasoning_effort
-                            )
-                                ? draft.reasoning_effort
+                            draft.reasoning_effort && model
+                                ? filterEffortForModel(catalogue, draft.reasoning_effort, model)
                                 : null,
                     })
                 }

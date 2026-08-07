@@ -32,12 +32,12 @@ from posthog.models.scoping.manager import resolve_effective_team_id
 from posthog.models.team.extensions import get_or_create_team_extension
 from posthog.models.team.team import Team
 
+from products.tasks.backend.logic.services.model_catalogue import filter_unsupported_effort
 from products.tasks.backend.models import TeamTasksConfig, UserTasksConfig
 from products.tasks.backend.temporal.process_task.utils import (
     PUBLIC_REASONING_EFFORTS,
     RuntimeAdapter,
     get_reasoning_effort_error,
-    get_supported_reasoning_efforts,
 )
 
 
@@ -181,13 +181,6 @@ def _resolve_from_preferences(
         reasoning_effort=reasoning_effort,
         source=source,
     )
-
-
-def filter_unsupported_effort(runtime_adapter: str, model: str, effort: str) -> str | None:
-    """Drop a stored effort the resolved model no longer supports (e.g. saved
-    `high` on a thinking model, then the preference's model changed)."""
-    supported = {e.value for e in get_supported_reasoning_efforts(runtime_adapter, model)}
-    return effort if effort in supported else None
 
 
 def validate_ai_run_preferences(

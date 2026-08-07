@@ -9,7 +9,6 @@ than reaching the internal ``logic.services`` module.
 from products.tasks.backend.logic.services.ai_run_defaults import (
     ResolvedAIRunConfig,
     build_ai_run_preferences_payload,
-    filter_unsupported_effort,
     get_team_ai_run_preferences,
     get_user_ai_run_preferences,
     resolve_ai_run_defaults,
@@ -21,7 +20,6 @@ from products.tasks.backend.logic.services.ai_run_defaults import (
 __all__ = [
     "ResolvedAIRunConfig",
     "build_ai_run_preferences_payload",
-    "filter_unsupported_effort",
     "get_team_ai_run_preferences",
     "get_user_ai_run_preferences",
     "resolve_ai_run_defaults",
