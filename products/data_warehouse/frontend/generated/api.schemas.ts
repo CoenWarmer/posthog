@@ -2745,6 +2745,7 @@ export interface CredentialApi {
  * * `Wix` - Wix
  * * `Sevalla` - Sevalla
  * * `Motion` - Motion
+ * * `GoogleTagManager` - GoogleTagManager
  */
 export type ExternalDataSourceTypeEnumApi =
     (typeof ExternalDataSourceTypeEnumApi)[keyof typeof ExternalDataSourceTypeEnumApi]
@@ -4032,6 +4033,7 @@ export const ExternalDataSourceTypeEnumApi = {
     Wix: 'Wix',
     Sevalla: 'Sevalla',
     Motion: 'Motion',
+    GoogleTagManager: 'GoogleTagManager',
 } as const
 
 export interface SimpleExternalDataSourceSerializersApi {

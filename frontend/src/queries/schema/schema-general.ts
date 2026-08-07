@@ -8693,6 +8693,7 @@ export const externalDataSources = [
     'Wix',
     'Sevalla',
     'Motion',
+    'GoogleTagManager',
 ] as const
 
 export type ExternalDataSourceType = (typeof externalDataSources)[number]

@@ -174,6 +174,7 @@ export interface RoleLookupResponseApi {
  * * `google-pubsub` - Google Pubsub
  * * `google-search-console` - Google Search Console
  * * `google-sheets` - Google Sheets
+ * * `google-tag-manager` - Google Tag Manager
  * * `hubspot` - Hubspot
  * * `intercom` - Intercom
  * * `jira` - Jira
@@ -223,6 +224,7 @@ export const IntegrationKindEnumApi = {
     GooglePubsub: 'google-pubsub',
     GoogleSearchConsole: 'google-search-console',
     GoogleSheets: 'google-sheets',
+    GoogleTagManager: 'google-tag-manager',
     Hubspot: 'hubspot',
     Intercom: 'intercom',
     Jira: 'jira',
@@ -485,6 +487,7 @@ export interface IntegrationAccessRequestApi {
      * * `google-pubsub` - Google Pubsub
      * * `google-search-console` - Google Search Console
      * * `google-sheets` - Google Sheets
+     * * `google-tag-manager` - Google Tag Manager
      * * `hubspot` - Hubspot
      * * `intercom` - Intercom
      * * `jira` - Jira
@@ -626,6 +629,7 @@ export type IntegrationsListParams = {
      * * `google-pubsub` - Google Pubsub
      * * `google-search-console` - Google Search Console
      * * `google-sheets` - Google Sheets
+     * * `google-tag-manager` - Google Tag Manager
      * * `hubspot` - Hubspot
      * * `intercom` - Intercom
      * * `jira` - Jira
@@ -686,6 +690,7 @@ export const IntegrationsListKind = {
     GooglePubsub: 'google-pubsub',
     GoogleSearchConsole: 'google-search-console',
     GoogleSheets: 'google-sheets',
+    GoogleTagManager: 'google-tag-manager',
     Hubspot: 'hubspot',
     Intercom: 'intercom',
     Jira: 'jira',
