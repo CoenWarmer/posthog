@@ -1135,6 +1135,7 @@ class ReplayScannerViewSet(TeamAndOrgViewSetMixin, AccessControlViewSetMixin, vi
         # update_or_create absorbs the concurrent-first-save race; created_by is pinned to
         # whoever saved first and later re-saves only refresh the snapshot fields.
         template, created = ReplayScannerTemplate.objects.update_or_create(
+            team_id=self.team_id,
             source_scanner=scanner,
             defaults=template_values,
             create_defaults={
