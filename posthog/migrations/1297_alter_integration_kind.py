@@ -5,7 +5,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("posthog", "1294_add_google_calendar_integration_kind"),
+        ("posthog", "1296_backfill_cimd_verification_token_url"),
     ]
 
     operations = [

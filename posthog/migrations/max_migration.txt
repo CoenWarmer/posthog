@@ -1,5 +1,1 @@
-<<<<<<< HEAD
-1296_backfill_cimd_verification_token_url
-=======
-1295_alter_integration_kind
->>>>>>> 61672390 (feat(data-warehouse): add google tag manager source)
+1297_alter_integration_kind
