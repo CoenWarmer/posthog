@@ -7,6 +7,7 @@ import { CreatePersonResult, MoveDistinctIdsResult } from '~/common/utils/db/db'
 import { Properties } from '~/plugin-scaffold'
 import { InternalPerson, PropertiesLastOperation, PropertiesLastUpdatedAt, Team } from '~/types'
 
+import { EventOps } from './person-update'
 import { FlushResult, PersonsStore } from './persons-store'
 import { PersonsStoreTransaction } from './persons-store-transaction'
 
@@ -97,6 +98,7 @@ export type PersonsStoreForBatch = Omit<
     | 'fetchForChecking'
     | 'fetchForUpdate'
     | 'fetchPersonsForUpdateByDistinctIds'
+    | 'applyEventOps'
     | 'createPerson'
     | 'updatePersonForMerge'
     | 'updatePersonWithPropertiesDiffForUpdate'
@@ -111,6 +113,7 @@ export type PersonsStoreForBatch = Omit<
     fetchForChecking(teamId: number, distinctId: string): Promise<InternalPerson | null>
     fetchForUpdate(teamId: number, distinctId: string): Promise<InternalPerson | null>
     fetchPersonsForUpdateByDistinctIds(teamId: number, distinctIds: string[]): Promise<InternalPersonWithDistinctId[]>
+    applyEventOps(person: InternalPerson, ops: EventOps, distinctId: string): Promise<[InternalPerson, PersonMessage[]]>
     moveDistinctIdsFromPersons(
         sources: InternalPerson[],
         target: InternalPerson,
@@ -285,6 +288,14 @@ export class BatchBoundPersonsStore implements PersonsStoreForBatch {
 
     fetchForChecking(teamId: number, distinctId: string): Promise<InternalPerson | null> {
         return this.store.fetchForChecking(teamId, distinctId, this.batchId)
+    }
+
+    applyEventOps(
+        person: InternalPerson,
+        ops: EventOps,
+        distinctId: string
+    ): Promise<[InternalPerson, PersonMessage[]]> {
+        return this.store.applyEventOps(person, ops, distinctId, this.batchId)
     }
 
     fetchForUpdate(teamId: number, distinctId: string): Promise<InternalPerson | null> {
