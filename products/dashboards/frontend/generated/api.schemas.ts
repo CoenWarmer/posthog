@@ -4666,6 +4666,7 @@ export const IntegrationKindApi = {
     Linear: 'linear',
     Github: 'github',
     Gitlab: 'gitlab',
+    Helpscout: 'helpscout',
     MetaAds: 'meta-ads',
     Clickup: 'clickup',
     RedditAds: 'reddit-ads',

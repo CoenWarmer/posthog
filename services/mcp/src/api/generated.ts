@@ -5786,6 +5786,7 @@ export namespace Schemas {
       Linear: 'linear',
       Github: 'github',
       Gitlab: 'gitlab',
+      Helpscout: 'helpscout',
       MetaAds: 'meta-ads',
       Clickup: 'clickup',
       RedditAds: 'reddit-ads',
@@ -39693,6 +39694,7 @@ export namespace Schemas {
      * * `google-pubsub` - Google Pubsub
      * * `google-search-console` - Google Search Console
      * * `google-sheets` - Google Sheets
+     * * `helpscout` - Helpscout
      * * `hubspot` - Hubspot
      * * `intercom` - Intercom
      * * `jira` - Jira
@@ -39743,6 +39745,7 @@ export namespace Schemas {
       GooglePubsub: 'google-pubsub',
       GoogleSearchConsole: 'google-search-console',
       GoogleSheets: 'google-sheets',
+      Helpscout: 'helpscout',
       Hubspot: 'hubspot',
       Intercom: 'intercom',
       Jira: 'jira',
@@ -39793,6 +39796,7 @@ export namespace Schemas {
        * * `google-pubsub` - Google Pubsub
        * * `google-search-console` - Google Search Console
        * * `google-sheets` - Google Sheets
+       * * `helpscout` - Helpscout
        * * `hubspot` - Hubspot
        * * `intercom` - Intercom
        * * `jira` - Jira
@@ -84345,6 +84349,7 @@ export namespace Schemas {
      * * `google-pubsub` - Google Pubsub
      * * `google-search-console` - Google Search Console
      * * `google-sheets` - Google Sheets
+     * * `helpscout` - Helpscout
      * * `hubspot` - Hubspot
      * * `intercom` - Intercom
      * * `jira` - Jira
@@ -84406,6 +84411,7 @@ export namespace Schemas {
       GooglePubsub: 'google-pubsub',
       GoogleSearchConsole: 'google-search-console',
       GoogleSheets: 'google-sheets',
+      Helpscout: 'helpscout',
       Hubspot: 'hubspot',
       Intercom: 'intercom',
       Jira: 'jira',
