@@ -1078,6 +1078,7 @@ export interface sourceWizardLogicActions {
             | 'GooglePlayConsole'
             | 'GoogleSearchConsole'
             | 'GoogleSheets'
+            | 'GoogleTagManager'
             | 'GoogleTasks'
             | 'GoogleWebfonts'
             | 'GoogleWorkspaceAdminReports'
