@@ -1208,6 +1208,8 @@ export interface HogQLQueryModifiersApi {
     inlineCohortCalculation?: InlineCohortCalculationApi | null
     materializationMode?: MaterializationModeApi | null
     materializedColumnsOptimizationMode?: MaterializedColumnsOptimizationModeApi | null
+    /** Merge sibling aggregating LEFT JOINs over federated Postgres tables into one UNION ALL join, so their scans overlap */
+    mergeFederatedAggregateJoins?: boolean | null
     optimizeJoinedFilters?: boolean | null
     optimizeProjections?: boolean | null
     /** HogQL parser backend; absent → `rust_py_with_cpp_shadow` (rust-py is primary, cpp runs as a sampled shadow). `*_shadow` modes return the primary result and sample-compare against the other parser, reporting divergences without failing the request. The `rust_py_*` modes drive the same hand-rolled Rust parser as `rust_*` but build `posthog.hogql.ast` dataclass instances directly via PyO3, skipping the JSON round-trip. */
@@ -4652,6 +4654,7 @@ export const IntegrationKindApi = {
     GoogleCloudStorage: 'google-cloud-storage',
     GoogleAds: 'google-ads',
     GoogleAnalytics: 'google-analytics',
+    GoogleCalendar: 'google-calendar',
     GoogleSearchConsole: 'google-search-console',
     GoogleSheets: 'google-sheets',
     LinkedinAds: 'linkedin-ads',
@@ -6129,6 +6132,7 @@ export interface HogQLQueryApi {
     /** Optional id of a direct-query-capable external data source to run against instead of ClickHouse — a pure-direct source, or a synced source with direct query enabled. */
     connectionId?: string | null
     explain?: boolean | null
+    /** Extra filters applied to query via {filters} or the column-bound {filters(expr AS key, ...)} placeholder */
     filters?: HogQLFiltersApi | null
     kind?: 'HogQLQuery'
     /** Modifiers used when performing the query */
@@ -9091,6 +9095,8 @@ export interface ActivityEventsListWidgetCatalogEntryOpenApiApi {
     readonly config_schema: ActivityEventsListWidgetConfigApi
     /** @nullable */
     required_product_access?: string | null
+    /** Whether tiles of this type self-update in real time after load. Live tiles show a fixed real-time window and cannot apply test-account filtering to the stream, so their config takes neither dateRange nor filterTestAccounts. */
+    live: boolean
 }
 
 export type ErrorTrackingListWidgetCatalogEntryOpenApiApiWidgetType =
@@ -9110,6 +9116,8 @@ export interface ErrorTrackingListWidgetCatalogEntryOpenApiApi {
     readonly config_schema: ErrorTrackingListWidgetConfigApi
     /** @nullable */
     required_product_access?: string | null
+    /** Whether tiles of this type self-update in real time after load. Live tiles show a fixed real-time window and cannot apply test-account filtering to the stream, so their config takes neither dateRange nor filterTestAccounts. */
+    live: boolean
 }
 
 export type SessionReplayListWidgetCatalogEntryOpenApiApiWidgetType =
@@ -9129,6 +9137,8 @@ export interface SessionReplayListWidgetCatalogEntryOpenApiApi {
     readonly config_schema: SessionReplayListWidgetConfigApi
     /** @nullable */
     required_product_access?: string | null
+    /** Whether tiles of this type self-update in real time after load. Live tiles show a fixed real-time window and cannot apply test-account filtering to the stream, so their config takes neither dateRange nor filterTestAccounts. */
+    live: boolean
 }
 
 export type ExperimentsListWidgetCatalogEntryOpenApiApiWidgetType =
@@ -9148,6 +9158,8 @@ export interface ExperimentsListWidgetCatalogEntryOpenApiApi {
     readonly config_schema: ExperimentsListWidgetConfigApi
     /** @nullable */
     required_product_access?: string | null
+    /** Whether tiles of this type self-update in real time after load. Live tiles show a fixed real-time window and cannot apply test-account filtering to the stream, so their config takes neither dateRange nor filterTestAccounts. */
+    live: boolean
 }
 
 export type ExperimentResultsWidgetCatalogEntryOpenApiApiWidgetType =
@@ -9167,6 +9179,8 @@ export interface ExperimentResultsWidgetCatalogEntryOpenApiApi {
     readonly config_schema: ExperimentResultsWidgetConfigApi
     /** @nullable */
     required_product_access?: string | null
+    /** Whether tiles of this type self-update in real time after load. Live tiles show a fixed real-time window and cannot apply test-account filtering to the stream, so their config takes neither dateRange nor filterTestAccounts. */
+    live: boolean
 }
 
 export type SurveyResultsWidgetCatalogEntryOpenApiApiWidgetType =
@@ -9186,6 +9200,8 @@ export interface SurveyResultsWidgetCatalogEntryOpenApiApi {
     readonly config_schema: SurveyResultsWidgetConfigApi
     /** @nullable */
     required_product_access?: string | null
+    /** Whether tiles of this type self-update in real time after load. Live tiles show a fixed real-time window and cannot apply test-account filtering to the stream, so their config takes neither dateRange nor filterTestAccounts. */
+    live: boolean
 }
 
 export type LogsListWidgetCatalogEntryOpenApiApiWidgetType =
@@ -9205,6 +9221,8 @@ export interface LogsListWidgetCatalogEntryOpenApiApi {
     readonly config_schema: LogsListWidgetConfigApi
     /** @nullable */
     required_product_access?: string | null
+    /** Whether tiles of this type self-update in real time after load. Live tiles show a fixed real-time window and cannot apply test-account filtering to the stream, so their config takes neither dateRange nor filterTestAccounts. */
+    live: boolean
 }
 
 export type WidgetCatalogEntryApi =
