@@ -296,12 +296,12 @@ export function LogsServices(): JSX.Element {
     return (
         <div className="flex flex-col gap-2 py-2 flex-1 min-h-0">
             {servicesSummary && (
-                <LemonBanner type="info" className="mb-0">
+                <LemonBanner type="info" className="mb-0 shrink-0">
                     Top {servicesSummary.top_services_count} services by volume:{' '}
                     {servicesSummary.top_services_volume_share_pct.toFixed(1)}% of traffic in this window.
                 </LemonBanner>
             )}
-            <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center justify-between gap-2 shrink-0">
                 <h3 className="m-0">Services</h3>
                 <LemonSelect
                     size="small"
@@ -318,6 +318,9 @@ export function LogsServices(): JSX.Element {
                 emptyState="No services found in this time range"
                 rowKey="service_name"
                 size="small"
+                allowContentScroll
+                // The table scrolls inside the scene, so pin the header to keep column labels visible.
+                className="[&_thead]:sticky [&_thead]:top-0 [&_thead]:z-[2]"
             />
         </div>
     )
