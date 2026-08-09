@@ -40,7 +40,6 @@ def _conversation(conversation_id: str) -> dict[str, Any]:
 def _drive_rows(
     manager: MagicMock, responses: list[Response], endpoint: str = "conversations", **incremental_kwargs: Any
 ) -> tuple[list[dict[str, Any]], list[list[dict[str, Any]]]]:
-    """Drive get_rows with a mocked session; return (params sent per page, batches yielded)."""
     sent_params: list[dict[str, Any]] = []
     response_iter = iter(responses)
 
@@ -97,7 +96,6 @@ class TestGetRows:
     def _drive(
         self, manager: MagicMock, responses: list[Response], **incremental_kwargs: Any
     ) -> tuple[list[dict[str, Any]], list[list[str]]]:
-        """Drive the conversations walk; return (params sent per page, ids yielded per batch)."""
         sent_params, batches = _drive_rows(manager, responses, **incremental_kwargs)
         yielded_ids = [[item["conversation_id"] for item in batch] for batch in batches]
         return sent_params, yielded_ids
