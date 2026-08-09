@@ -62,6 +62,15 @@ class TestDecagonSource:
         assert conversations.supports_append is False
         assert [f["field"] for f in conversations.incremental_fields] == ["updated_at"]
 
+        admin_logs = next(s for s in schemas if s.name == "admin_logs")
+        # Merge on id keeps the table correct even if the loosely typed `start` filter is
+        # ignored server-side; an append sync in that case would re-add all history every
+        # run, so it is not offered. Opt-in until the details columns are confirmed safe.
+        assert admin_logs.supports_incremental is True
+        assert admin_logs.supports_append is False
+        assert admin_logs.should_sync_default is False
+        assert [f["field"] for f in admin_logs.incremental_fields] == ["created_at"]
+
     def test_get_schemas_filtered_by_names(self) -> None:
         assert [s.name for s in self.source.get_schemas(self.config, self.team_id, names=["conversations"])] == [
             "conversations"
