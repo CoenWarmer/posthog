@@ -1,7 +1,7 @@
 import { useActions, useValues } from 'kea'
 
 import { IconSparkles } from '@posthog/icons'
-import { LemonBanner, LemonButton, SpinnerOverlay } from '@posthog/lemon-ui'
+import { LemonBanner, LemonButton, LemonTag, SpinnerOverlay, Tooltip } from '@posthog/lemon-ui'
 
 import { NotFound } from 'lib/components/NotFound'
 import { FEATURE_FLAGS } from 'lib/constants'
@@ -32,6 +32,7 @@ import { ScannerRunTab } from './components/ScannerRunTab'
 import { VisionActionsTab } from './components/VisionActionsTab'
 import { replayScannerLogic } from './replayScannerLogic'
 import { ReplayScannerTab, replayScannerSceneLogic } from './replayScannerSceneLogic'
+import { LIMIT_REACHED_TOOLTIP } from './scannerCopy'
 
 export const scene: SceneExport = {
     component: ReplayScannerSceneComponent,
@@ -71,6 +72,13 @@ export function ReplayScannerSceneComponent(): JSX.Element {
         <SceneContent>
             <SceneTitleSection
                 name={scanner.name || 'Untitled scanner'}
+                nameSuffix={
+                    scanner.limit_reached ? (
+                        <Tooltip title={LIMIT_REACHED_TOOLTIP}>
+                            <LemonTag type="danger">Limit reached</LemonTag>
+                        </Tooltip>
+                    ) : undefined
+                }
                 description={scanner.description}
                 resourceType={{ type: 'replay_vision' }}
                 actions={

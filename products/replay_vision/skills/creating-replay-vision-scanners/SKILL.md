@@ -98,6 +98,10 @@ Then decide:
   tightening the `query`, lowering `sampling_rate`, or picking a cheaper `model` first.
 - If the org is already `exhausted`, say so — a new enabled scanner won't produce anything until the budget
   resets, and its observations will be silently skipped.
+- If the estimate is a large fraction of `remaining` but the user still wants the scanner, offer a
+  per-scanner cap: set `credit_limit` on create so this scanner can only ever spend that many credits per
+  billing period. It stops scanning once the credits left can't cover another observation, then resumes
+  when the period resets. Sessions it skipped while capped are not scanned later.
 
 Confirmation here is a conversation step, not an API capability — surface the trade-off and let the user
 choose. When the projected volume is clearly small relative to the budget, you don't need to ask.

@@ -402,6 +402,21 @@ describe('replayScannerLogic', () => {
                 expectedErrors: { sampling_rate: expect.any(String) },
             },
             {
+                name: 'flags a zero credit limit, which would silently stop the scanner forever',
+                setup: () => logic.actions.setScannerValues({ credit_limit: 0 }),
+                expectedErrors: { credit_limit: expect.any(String) },
+            },
+            {
+                name: 'flags a negative credit limit',
+                setup: () => logic.actions.setScannerValues({ credit_limit: -10 }),
+                expectedErrors: { credit_limit: expect.any(String) },
+            },
+            {
+                name: 'flags the limit toggled on but left empty, so it cannot silently save as unlimited',
+                setup: () => logic.actions.setScannerValues({ credit_limit: NaN }),
+                expectedErrors: { credit_limit: expect.any(String) },
+            },
+            {
                 name: 'flags scorer scale when min >= max',
                 setup: () => {
                     logic.actions.setScannerType('scorer')
@@ -499,6 +514,73 @@ describe('replayScannerLogic', () => {
             })
             await expectLogic(logic).toMatchValues({
                 isScannerValid: true,
+            })
+        })
+
+        it.each([null, 1, 500])('accepts a credit limit of %p, including the unlimited default', async (limit) => {
+            logic.actions.setScannerValues({ credit_limit: limit })
+            await expectLogic(logic).toMatchValues({
+                scannerValidationErrors: expect.objectContaining({ credit_limit: undefined }),
+            })
+        })
+    })
+
+    describe('creditLimitState', () => {
+        const estimate = (perMonth: number | null, perObservation = 15): void => {
+            logic.actions.loadScannerEstimateSuccess({
+                estimated_credits_per_month: perMonth,
+                credits_per_observation: perObservation,
+            } as any)
+        }
+
+        it('decodes null as limit off', async () => {
+            logic.actions.setScannerValues({ credit_limit: null })
+            await expectLogic(logic).toMatchValues({
+                creditLimitState: expect.objectContaining({ limit: null, isOn: false, isEmptyButEnabled: false }),
+            })
+        })
+
+        it('decodes the NaN sentinel as on-but-empty, which blocks the save', async () => {
+            logic.actions.setScannerValues({ credit_limit: NaN })
+            await expectLogic(logic).toMatchValues({
+                creditLimitState: expect.objectContaining({ limit: null, isOn: true, isEmptyButEnabled: true }),
+            })
+        })
+
+        it('seeds the field with double the forecast when one exists', async () => {
+            estimate(100)
+            await expectLogic(logic).toMatchValues({
+                creditLimitState: expect.objectContaining({ seedValue: 200 }),
+            })
+        })
+
+        it('seeds at least one credit for a tiny but non-zero forecast', async () => {
+            estimate(0.3)
+            await expectLogic(logic).toMatchValues({
+                creditLimitState: expect.objectContaining({ seedValue: 1 }),
+            })
+        })
+
+        it.each([
+            ['no estimate', null],
+            ['a zero estimate, which must not seed a 1-credit cap', 0],
+        ])('leaves the field empty with %s', async (_name, perMonth) => {
+            estimate(perMonth as number | null)
+            await expectLogic(logic).toMatchValues({
+                creditLimitState: expect.objectContaining({ seedValue: NaN }),
+            })
+        })
+
+        it('flags a limit below the forecast and one below a single scan', async () => {
+            estimate(100, 15)
+            logic.actions.setScannerValues({ credit_limit: 10 })
+            await expectLogic(logic).toMatchValues({
+                creditLimitState: expect.objectContaining({
+                    limit: 10,
+                    isOn: true,
+                    isBelowEstimate: true,
+                    cannotAffordOneScan: true,
+                }),
             })
         })
     })

@@ -9,6 +9,8 @@ interface StoredScannerDraft {
     teamId: number
     savedAt: number
     scanner: ReplayScanner
+    /** The credit limit toggle was on with the amount still empty (a NaN sentinel JSON cannot carry). */
+    creditLimitEmptyButEnabled?: boolean
 }
 
 export interface ScannerDraft {
@@ -18,7 +20,13 @@ export interface ScannerDraft {
 
 export function writeScannerDraft(teamId: number, scanner: ReplayScanner): number | null {
     const savedAt = Date.now()
-    const draft: StoredScannerDraft = { version: DRAFT_VERSION, teamId, savedAt, scanner }
+    const draft: StoredScannerDraft = {
+        version: DRAFT_VERSION,
+        teamId,
+        savedAt,
+        scanner,
+        creditLimitEmptyButEnabled: Number.isNaN(scanner.credit_limit as number),
+    }
     try {
         localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(draft))
         return savedAt
@@ -42,6 +50,9 @@ export function readScannerDraft(teamId: number): ScannerDraft | null {
             !draft.scanner
         ) {
             return null
+        }
+        if (draft.creditLimitEmptyButEnabled) {
+            return { scanner: { ...draft.scanner, credit_limit: NaN }, savedAt: draft.savedAt }
         }
         return { scanner: draft.scanner, savedAt: draft.savedAt }
     } catch {
