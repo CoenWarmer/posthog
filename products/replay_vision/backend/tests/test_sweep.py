@@ -310,9 +310,8 @@ def test_check_scanner_budget_activity_caps_and_advances_the_watermark(
 
 @pytest.mark.django_db(transaction=True)
 def test_check_scanner_budget_activity_capped_by_in_flight_alone_does_not_advance_the_watermark() -> None:
-    # Settled spend alone leaves room for another observation. Only adding in-flight reservations
-    # pushes it over. That's a transient spike (a failed observation would release it without ever
-    # settling), so the scanner must skip this tick without burning its permanent watermark advance.
+    # Only adding in-flight reservations pushes this over the limit: a transient spike must skip
+    # the tick without burning the permanent watermark advance.
     limit = 20 * _OBSERVATION_CREDITS
     scanner = _make_scanner(credit_limit=limit)
     stale = dt.datetime(2026, 1, 1, tzinfo=dt.UTC)
