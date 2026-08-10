@@ -153,8 +153,8 @@ export function GatewayAccessSection(): JSX.Element | null {
                 </LemonButton>
             </div>
             <div className="text-sm text-secondary">
-                You share your own {server.name} connection, and each teammate shares theirs. Pick whether an agent
-                uses it only for your runs or for every agent run in this project. Teammates can't use the connection
+                You share your own {server.name} connection, and each teammate shares theirs. Pick whether an agent uses
+                it only for your runs or for every agent run in this project. Teammates can't use the connection
                 directly, but agents can act through it on their runs.
             </div>
 

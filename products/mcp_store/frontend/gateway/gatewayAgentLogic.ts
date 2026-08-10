@@ -32,10 +32,10 @@ export interface gatewayAgentLogicValues {
     breadcrumbs: Breadcrumb[]
     recentCalls: MCPAuditEventApi[]
     recentCallsLoading: boolean
-    sharesByServerId: Record<string, AgentServerShare>
-    sharedServerIds: Set<string>
     sharedByYouCount: number
+    sharedServerIds: Set<string>
     sharedServers: MCPGatewayServerApi[]
+    sharesByServerId: Record<string, AgentServerShare>
     shownRecentCalls: number
     unsharedServers: MCPGatewayServerApi[]
     visibleRecentCalls: MCPAuditEventApi[]
@@ -47,11 +47,13 @@ export interface gatewayAgentLogicActions {
         accountId: string,
         serverId: string,
         enabled: boolean,
+        scope?: import('../generated/api.schemas').MCPAgentGrantScopeEnumApi | undefined,
         policies?: import('../generated/api.schemas').ToolPolicyEntryApi[] | undefined
     ) => {
         accountId: string
         enabled: boolean
         policies: import('../generated/api.schemas').ToolPolicyEntryApi[] | undefined
+        scope: import('../generated/api.schemas').MCPAgentGrantScopeEnumApi
         serverId: string
     } // mcpGatewayLogic
     toggleAccountStatus: (

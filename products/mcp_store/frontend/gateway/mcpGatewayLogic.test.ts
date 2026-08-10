@@ -423,6 +423,7 @@ describe('mcpGatewayLogic', () => {
                 {
                     id: 'linear-id',
                     shared_by: YOU,
+                    scope: 'personal' as const,
                     name: 'Linear',
                     description: '',
                     icon_key: '',
@@ -466,6 +467,7 @@ describe('mcpGatewayLogic', () => {
                 {
                     id: 'linear-id',
                     shared_by: YOU,
+                    scope: 'personal' as const,
                     name: 'Linear',
                     description: '',
                     icon_key: '',

@@ -417,6 +417,7 @@ class TestGetInstallationsForSandbox(BaseTest):
         User.objects.filter(id=self.user.id).update(is_active=False)
 
         assert resolve_gateway_agent_token(token) is None
+
     def _grant(
         self,
         account: MCPServiceAccount,

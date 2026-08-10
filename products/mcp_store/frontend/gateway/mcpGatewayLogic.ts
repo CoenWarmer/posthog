@@ -418,14 +418,14 @@ export interface mcpGatewayLogicActions {
     refreshServersAfterConnection: () => {
         value: true
     }
-    removeServer: (serverId: string) => {
-        serverId: string
-    }
     removeAllAgentServerShares: (
         accountId: string,
         serverId: string
     ) => {
         accountId: string
+        serverId: string
+    }
+    removeServer: (serverId: string) => {
         serverId: string
     }
     removeServerComplete: (serverId: string) => {
@@ -450,8 +450,8 @@ export interface mcpGatewayLogicActions {
     ) => {
         accountId: string
         enabled: boolean
-        scope: MCPAgentGrantScopeEnumApi
         policies: ToolPolicyEntryApi[] | undefined
+        scope: MCPAgentGrantScopeEnumApi
         serverId: string
     }
     setAgentServerAccessComplete: (
@@ -1551,6 +1551,7 @@ export const mcpGatewayLogic = kea<mcpGatewayLogicType>([
                                           {
                                               service_account_id: updatedAccount.id,
                                               user: yourGrant.shared_by,
+                                              scope: yourGrant.scope,
                                               name: updatedAccount.name,
                                               handle: updatedAccount.handle,
                                               status: updatedAccount.status,

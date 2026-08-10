@@ -215,11 +215,13 @@ export interface gatewayServerLogicActions {
         accountId: string,
         serverId: string,
         enabled: boolean,
+        scope?: import('../generated/api.schemas').MCPAgentGrantScopeEnumApi | undefined,
         policies?: import('../generated/api.schemas').ToolPolicyEntryApi[] | undefined
     ) => {
         accountId: string
         enabled: boolean
         policies: import('../generated/api.schemas').ToolPolicyEntryApi[] | undefined
+        scope: import('../generated/api.schemas').MCPAgentGrantScopeEnumApi
         serverId: string
     } // mcpGatewayLogic
     setAgentServerAccessSuccess: (
@@ -382,6 +384,11 @@ export interface gatewayServerLogicMeta {
     __keaTypeGenInternalSelectorTypes: {
         server: (servers: MCPGatewayServerApi[], arg: any) => MCPGatewayServerApi | null
         breadcrumbs: (server: MCPGatewayServerApi | null) => Breadcrumb[]
+        agentSharesByAccountId: (
+            server: MCPGatewayServerApi | null,
+            serviceAccounts: MCPServiceAccountApi[],
+            currentUserId: number | null
+        ) => Record<string, AgentServerShare>
         policyCounts: (
             toolPolicies: ResolvedToolPolicyApi[],
             scope: PolicyScope
@@ -413,11 +420,6 @@ export interface gatewayServerLogicMeta {
             requestedTeamScope: boolean,
             scope: PolicyScope
         ) => boolean
-        agentSharesByAccountId: (
-            server: MCPGatewayServerApi | null,
-            serviceAccounts: MCPServiceAccountApi[],
-            currentUserId: number | null
-        ) => Record<string, AgentServerShare>
     }
 }
 

@@ -1453,9 +1453,7 @@ class MCPAuditEventViewSet(
         events = MCPAuditEvent.objects.for_team(self.team_id)
         if not self._is_project_admin():
             events = events.filter(installation__user_id=cast(User, self.request.user).id)
-        return events.select_related("actor_user", "actor_service_account", "credential_owner").order_by(
-            "-created_at"
-        )
+        return events.select_related("actor_user", "actor_service_account", "credential_owner").order_by("-created_at")
 
     @validated_request(
         query_serializer=AuditQuerySerializer,

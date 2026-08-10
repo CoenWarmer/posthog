@@ -381,6 +381,7 @@ describe('gatewayServerLogic', () => {
         expect(mockServiceAccountAccess).toHaveBeenCalledWith(expect.any(String), account.id, {
             gateway_server_id: 'server-id',
             enabled: true,
+            scope: 'personal',
             policies: [
                 { tool_name: 'list_issues', policy_state: 'approved' },
                 { tool_name: 'create_issue', policy_state: 'do_not_use' },
