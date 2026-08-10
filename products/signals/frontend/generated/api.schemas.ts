@@ -1904,7 +1904,8 @@ export interface SignalScoutConfigOptionsApi {
      * @nullable
      */
     structured_output_schema?: SignalScoutConfigOptionsApiStructuredOutputSchema
-     * MCP gateway servers (by id) this scout's runs may use, chosen from the connections its creator shared with the Scout agent. Selection is per scout: an empty list mounts none of the creator's connections. Connections teammates shared to the whole team are not gated by this list. Applies from the scout's next run.
+    /**
+     * MCP gateway servers (by id) this scout's runs may use, chosen from the connections members shared to the whole team. Selection is per scout: an empty list gives the scout no MCP servers. Applies from the scout's next run.
      * @maxItems 100
      */
     mcp_gateway_server_ids?: string[]
@@ -2042,7 +2043,8 @@ export interface SignalScoutConfigApi {
      * @nullable
      */
     readonly model: string | null
-     * MCP gateway servers (by id) this scout's runs may use, chosen from the connections its creator shared with the Scout agent. Selection is per scout: an empty list mounts none of the creator's connections. Connections teammates shared to the whole team are not gated by this list. Applies from the scout's next run.
+    /**
+     * MCP gateway servers (by id) this scout's runs may use, chosen from the connections members shared to the whole team. Selection is per scout: an empty list gives the scout no MCP servers. Applies from the scout's next run.
      * @maxItems 100
      */
     readonly mcp_gateway_server_ids: readonly string[]
@@ -2126,7 +2128,8 @@ export interface SignalScoutConfigCreateApi {
      * @nullable
      */
     structured_output_schema?: SignalScoutConfigCreateApiStructuredOutputSchema
-     * MCP gateway servers (by id) this scout's runs may use, chosen from the connections its creator shared with the Scout agent. Selection is per scout: an empty list mounts none of the creator's connections. Connections teammates shared to the whole team are not gated by this list. Applies from the scout's next run.
+    /**
+     * MCP gateway servers (by id) this scout's runs may use, chosen from the connections members shared to the whole team. Selection is per scout: an empty list gives the scout no MCP servers. Applies from the scout's next run.
      * @maxItems 100
      */
     mcp_gateway_server_ids?: string[]
@@ -2188,7 +2191,8 @@ export interface PatchedSignalScoutConfigUpdateApi {
      * @maxItems 10
      */
     tags?: string[]
-     * MCP gateway servers (by id) this scout's runs may use, chosen from the connections its creator shared with the Scout agent. Selection is per scout: an empty list mounts none of the creator's connections. Connections teammates shared to the whole team are not gated by this list. Applies from the scout's next run.
+    /**
+     * MCP gateway servers (by id) this scout's runs may use, chosen from the connections members shared to the whole team. Selection is per scout: an empty list gives the scout no MCP servers. Applies from the scout's next run.
      * @maxItems 100
      */
     mcp_gateway_server_ids?: string[]

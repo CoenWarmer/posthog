@@ -2101,10 +2101,9 @@ def _validate_scout_model(value: str | None, context: dict, current: str | None 
 MAX_SCOUT_MCP_GATEWAY_SERVERS = 100
 
 _MCP_GATEWAY_SERVER_IDS_HELP = (
-    "MCP gateway servers (by id) this scout's runs may use, chosen from the connections its "
-    "creator shared with the Scout agent. Selection is per scout: an empty list mounts none "
-    "of the creator's connections. Connections teammates shared to the whole team are not "
-    "gated by this list. Applies from the scout's next run."
+    "MCP gateway servers (by id) this scout's runs may use, chosen from the connections "
+    "members shared to the whole team. Selection is per scout: an empty list gives the "
+    "scout no MCP servers. Applies from the scout's next run."
 )
 
 

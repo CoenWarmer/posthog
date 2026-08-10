@@ -1,4 +1,4 @@
-import { useActions, useMountedLogic, useValues } from 'kea'
+import { useMountedLogic, useValues } from 'kea'
 import { useState } from 'react'
 
 import { IconChevronRight, IconServer } from '@posthog/icons'
@@ -7,10 +7,9 @@ import { ServerIcon } from '@posthog/products-mcp-store/frontend/scene/icons'
 
 import { FEATURE_FLAGS } from 'lib/constants'
 import { featureFlagLogic } from 'lib/logic/featureFlagLogic'
-import { pluralize } from 'lib/utils/strings'
 import { urls } from 'scenes/urls'
 
-import type { GatewayYourConnectionApi, MCPGatewayServerApi } from 'products/mcp_store/frontend/generated/api.schemas'
+import type { MCPServiceAccountServerApi } from 'products/mcp_store/frontend/generated/api.schemas'
 
 import { scoutMcpServersLogic } from '../../../logics/scoutMcpServersLogic'
 
@@ -27,10 +26,10 @@ interface ScoutMcpServersPickerProps {
 }
 
 /**
- * Per-scout selection of the user's connected MCP servers, persisted as the scout config's
- * `mcp_gateway_server_ids`. Selecting a server also shares the user's connection with the
- * Scout agent when it isn't shared yet — the grant makes the connection mountable, the
- * selection decides which scouts mount it.
+ * Per-scout selection among the MCP servers members shared to the whole team, persisted as the
+ * scout config's `mcp_gateway_server_ids`. Scouts are a team resource, so only team shares are
+ * offered: the selection is the same for every viewer, and matches exactly what the run mounts.
+ * Sharing a connection to the team happens on the MCP gateway page, not here.
  */
 export function ScoutMcpServersPicker(props: ScoutMcpServersPickerProps): JSX.Element | null {
     const { featureFlags } = useValues(featureFlagLogic)
@@ -40,78 +39,44 @@ export function ScoutMcpServersPicker(props: ScoutMcpServersPickerProps): JSX.El
     return props.compact ? <CompactPicker {...props} /> : <FullPicker {...props} />
 }
 
-function connectionIssue(connection: GatewayYourConnectionApi): { label: string; tagType: LemonTagType } | null {
-    if (connection.needs_reauth) {
-        return { label: 'Reconnect', tagType: 'danger' }
+function connectionIssue(server: MCPServiceAccountServerApi): { label: string; tagType: LemonTagType } | null {
+    switch (server.connection_state) {
+        case 'needs_reauth':
+            return { label: 'Reconnect', tagType: 'danger' }
+        case 'pending_oauth':
+            return { label: 'Pending OAuth', tagType: 'warning' }
+        case 'disabled':
+            return { label: 'Disabled', tagType: 'muted' }
+        case 'missing_credential':
+            return { label: 'Needs connection', tagType: 'warning' }
+        default:
+            return null
     }
-    if (connection.pending_oauth) {
-        return { label: 'Pending OAuth', tagType: 'warning' }
-    }
-    if (!connection.is_enabled) {
-        return { label: 'Disabled', tagType: 'muted' }
-    }
-    return null
-}
-
-/**
- * Why selecting this server can't create the Scout agent grant it needs, mirroring the
- * states the gateway blocks new agent shares on. Admins see team-disabled and revoked
- * servers in the list; everyone can hold a connection that is broken or switched off.
- */
-function scoutShareBlockedReason(server: MCPGatewayServerApi): string | undefined {
-    if (!server.is_team_enabled) {
-        return 'This server is turned off for the team.'
-    }
-    if (server.is_revoked_for_you) {
-        return 'An admin has turned off this server for you.'
-    }
-    if (server.your_connection === null) {
-        return 'Connect this server before this scout can use it.'
-    }
-    if (server.your_connection.needs_reauth) {
-        return 'Reconnect this server before this scout can use it.'
-    }
-    if (server.your_connection.pending_oauth) {
-        return 'Finish connecting this server before this scout can use it.'
-    }
-    if (!server.your_connection.is_enabled) {
-        return 'Enable your connection before this scout can use it.'
-    }
-    return undefined
 }
 
 interface PickerState {
     hiddenCount: number
     initialLoading: boolean
-    shareDisabledReason: string | undefined
+    selectDisabledReason: string | undefined
     showAll: boolean
     setShowAll: (showAll: boolean) => void
     toggleServer: (serverId: string, selected: boolean) => void
-    visibleServers: MCPGatewayServerApi[]
+    visibleServers: MCPServiceAccountServerApi[]
 }
 
 function usePickerState({ selectedServerIds, onChange, disabledReason }: ScoutMcpServersPickerProps): PickerState {
     const [showAll, setShowAll] = useState(false)
-    const { connectedGatewayServers, gatewayServersLoading, scoutAccount, scoutServersLoading } =
-        useValues(scoutMcpServersLogic)
-    const { ensureScoutServerShared } = useActions(scoutMcpServersLogic)
+    const { scoutAccount, scoutServersLoading, teamScoutServers } = useValues(scoutMcpServersLogic)
 
-    const initialLoading =
-        (gatewayServersLoading && connectedGatewayServers.length === 0) ||
-        (scoutServersLoading && scoutAccount === null)
-    const visibleServers = showAll ? connectedGatewayServers : connectedGatewayServers.slice(0, MAX_VISIBLE_SERVERS)
+    const initialLoading = scoutServersLoading && scoutAccount === null
+    const visibleServers = showAll ? teamScoutServers : teamScoutServers.slice(0, MAX_VISIBLE_SERVERS)
     const toggleServer = (serverId: string, selected: boolean): void => {
-        if (selected) {
-            // The scout can only mount a selected server once the user's connection is shared
-            // with the Scout agent; create that (personal) grant on first selection.
-            ensureScoutServerShared(serverId)
-        }
         onChange(selected ? [...selectedServerIds, serverId] : selectedServerIds.filter((id) => id !== serverId))
     }
     return {
-        hiddenCount: connectedGatewayServers.length - visibleServers.length,
+        hiddenCount: teamScoutServers.length - visibleServers.length,
         initialLoading,
-        shareDisabledReason:
+        selectDisabledReason:
             disabledReason ??
             (scoutAccount === null && !scoutServersLoading ? 'Scout MCP access is unavailable' : undefined),
         showAll,
@@ -127,24 +92,16 @@ function SelectSwitch({
     state,
     selectedServerIds,
 }: {
-    server: MCPGatewayServerApi
+    server: MCPServiceAccountServerApi
     size?: 'small'
     state: PickerState
     selectedServerIds: string[]
 }): JSX.Element {
-    const { scoutSharedServerIds, serverShareLoadingIds } = useValues(scoutMcpServersLogic)
-    const selected = selectedServerIds.includes(server.id)
-    // Only block turning the switch on when that would create a new Scout grant the server
-    // can't back. Selected servers stay deselectable, and already-shared ones need no new grant.
-    const blockedReason = selected || scoutSharedServerIds.has(server.id) ? undefined : scoutShareBlockedReason(server)
     return (
         <LemonSwitch
             size={size}
-            checked={selected}
-            loading={serverShareLoadingIds.has(server.id)}
-            disabledReason={
-                serverShareLoadingIds.has(server.id) ? 'Saving' : (state.shareDisabledReason ?? blockedReason)
-            }
+            checked={selectedServerIds.includes(server.id)}
+            disabledReason={state.selectDisabledReason}
             onChange={(checked) => state.toggleServer(server.id, checked)}
             aria-label={`Let this scout use ${server.name}`}
         />
@@ -153,14 +110,14 @@ function SelectSwitch({
 
 function FullPicker(props: ScoutMcpServersPickerProps): JSX.Element {
     useMountedLogic(scoutMcpServersLogic)
-    const { scoutAccount, teammateScoutServers } = useValues(scoutMcpServersLogic)
+    const { scoutAccount } = useValues(scoutMcpServersLogic)
     const state = usePickerState(props)
 
     let body: JSX.Element
     if (state.initialLoading) {
         body = (
             <div className="flex items-center gap-2 rounded border border-dashed px-3 py-4 text-sm text-secondary">
-                <Spinner /> Loading your MCP servers...
+                <Spinner /> Loading MCP servers...
             </div>
         )
     } else if (state.visibleServers.length === 0) {
@@ -168,9 +125,10 @@ function FullPicker(props: ScoutMcpServersPickerProps): JSX.Element {
             <div className="flex items-start gap-3 rounded border border-dashed px-3 py-3">
                 <IconServer className="size-5 shrink-0 mt-0.5 text-secondary" />
                 <div className="min-w-0">
-                    <div className="font-medium text-sm text-default">No MCP servers connected yet</div>
+                    <div className="font-medium text-sm text-default">No MCP servers shared with the team yet</div>
                     <p className="text-xs text-secondary mt-0.5 mb-0">
-                        <Link to={urls.mcpGateway()}>Connect an MCP server</Link> to give your scouts external tools.
+                        <Link to={urls.mcpGateway()}>Share an MCP server with the team</Link> to give scouts external
+                        tools.
                     </p>
                 </div>
             </div>
@@ -180,10 +138,10 @@ function FullPicker(props: ScoutMcpServersPickerProps): JSX.Element {
             <div className="rounded border bg-bg-light overflow-hidden">
                 <div className="divide-y">
                     {state.visibleServers.map((server) => {
-                        const issue = server.your_connection && connectionIssue(server.your_connection)
+                        const issue = connectionIssue(server)
                         return (
                             <div key={server.id} className="flex items-center gap-3 px-3 py-2.5">
-                                <ServerIcon iconDomain={server.icon_domain} serverUrl={server.url} size={28} />
+                                <ServerIcon iconDomain={server.icon_domain} size={28} />
                                 <div className="min-w-0 flex-1">
                                     <div className="font-medium text-sm text-default truncate">{server.name}</div>
                                     {server.description && (
@@ -222,7 +180,7 @@ function FullPicker(props: ScoutMcpServersPickerProps): JSX.Element {
                     to={urls.mcpGateway()}
                     className="group flex items-center justify-between gap-3 border-t border-primary px-3 py-2 text-xs no-underline transition-colors hover:bg-bg-3000"
                 >
-                    <span className="text-secondary group-hover:text-default">Connect new MCP servers</span>
+                    <span className="text-secondary group-hover:text-default">Share more MCP servers</span>
                     <IconChevronRight className="size-4 shrink-0 text-muted transition-colors group-hover:text-default" />
                 </Link>
             </div>
@@ -234,16 +192,10 @@ function FullPicker(props: ScoutMcpServersPickerProps): JSX.Element {
             <div className="flex flex-col gap-0.5">
                 <span className="font-medium text-sm">MCP servers</span>
                 <p className="text-xs text-secondary mb-0">
-                    Choose which of your connected MCP servers this scout can use.
+                    Choose which of the team's shared MCP servers this scout can use.
                 </p>
             </div>
             {body}
-            {teammateScoutServers.length > 0 && (
-                <span className="text-xs text-muted">
-                    This scout can also use {pluralize(teammateScoutServers.length, 'server')} teammates shared to the
-                    team.
-                </span>
-            )}
         </div>
     )
 }
@@ -257,23 +209,23 @@ function CompactPicker(props: ScoutMcpServersPickerProps): JSX.Element {
             <div className="flex flex-col min-w-0">
                 <span className="text-xs text-default">MCP servers</span>
                 <span className="text-[11.5px] text-muted">
-                    Choose which of your connected MCP servers this scout can use.{' '}
+                    Choose which of the team's shared MCP servers this scout can use.{' '}
                     <Link to={urls.mcpGateway()}>Manage MCP servers</Link>
                 </span>
             </div>
             {state.initialLoading ? (
                 <span className="flex items-center gap-2 text-[11.5px] text-muted">
-                    <Spinner /> Loading your MCP servers...
+                    <Spinner /> Loading MCP servers...
                 </span>
             ) : state.visibleServers.length === 0 ? (
                 <span className="text-[11.5px] text-muted">
-                    <Link to={urls.mcpGateway()}>Connect an MCP server</Link> to give your scouts external tools.
+                    <Link to={urls.mcpGateway()}>Share an MCP server with the team</Link> to give scouts external tools.
                 </span>
             ) : (
                 <div className="flex flex-col gap-1.5">
                     {state.visibleServers.map((server) => (
                         <div key={server.id} className="flex items-center gap-2">
-                            <ServerIcon iconDomain={server.icon_domain} serverUrl={server.url} size={20} />
+                            <ServerIcon iconDomain={server.icon_domain} size={20} />
                             <span className="min-w-0 flex-1 truncate text-xs text-default">{server.name}</span>
                             <SelectSwitch
                                 server={server}

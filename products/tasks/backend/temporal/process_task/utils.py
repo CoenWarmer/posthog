@@ -592,10 +592,9 @@ def get_user_mcp_server_configs(
     rather than only the ones its owner chose.
 
     ``allowed_gateway_server_ids`` is the built-in agent counterpart (a scout's per-scout
-    selection, from ``Task.mcp_gateway_server_allowlist``): it narrows the credential owner's
-    personal grants to the listed gateway servers before mounting. ``None`` leaves them
-    unfiltered; an empty list mounts none of them. Members' team-scoped grants are not gated
-    by it — a team share backs every run of the agent.
+    selection, from ``Task.mcp_gateway_server_allowlist``): it narrows the agent's mounts to
+    the listed gateway servers regardless of grant scope. ``None`` leaves them unfiltered;
+    an empty list mounts nothing.
 
     The `x-posthog-mcp-consumer` header is set on every config so the agent's
     identity propagates through the MCP Store proxy to whichever upstream MCP

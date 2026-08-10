@@ -22,7 +22,13 @@ function ControlledPicker({ compact }: { compact?: boolean }): JSX.Element {
 const YOU = { id: 179, uuid: 'you-uuid', email: 'you@posthog.com', hedgehog_config: null }
 const TEAMMATE = { id: 2, uuid: 'mate-uuid', email: 'mate@posthog.com', hedgehog_config: null }
 
-function grant(id: string, name: string, sharedBy = YOU, scope = 'personal'): Record<string, unknown> {
+function grant(
+    id: string,
+    name: string,
+    sharedBy = YOU,
+    scope = 'team',
+    connectionState = 'ready'
+): Record<string, unknown> {
     return {
         id,
         shared_by: sharedBy,
@@ -31,42 +37,7 @@ function grant(id: string, name: string, sharedBy = YOU, scope = 'personal'): Re
         description: `${name} workspace`,
         icon_key: name.toLowerCase(),
         icon_domain: `${name.toLowerCase()}.com`,
-        connection_state: 'ready',
-    }
-}
-
-function gatewayServer(
-    id: string,
-    name: string,
-    connection: Record<string, unknown> | null = {
-        installation_id: `${id}-installation`,
-        is_enabled: true,
-        pending_oauth: false,
-        needs_reauth: false,
-        last_used_at: null,
-    }
-): Record<string, unknown> {
-    return {
-        id,
-        name,
-        url: `https://${name.toLowerCase()}.com/mcp`,
-        description: `${name} workspace tools`,
-        category: 'dev',
-        template_auth_type: 'oauth',
-        is_team_enabled: true,
-        icon_key: name.toLowerCase(),
-        icon_domain: `${name.toLowerCase()}.com`,
-        docs_url: '',
-        template_id: null,
-        tool_count: 3,
-        connections: [],
-        your_connection: connection,
-        agents: [],
-        revoked_user_ids: [],
-        is_revoked_for_you: false,
-        created_by: null,
-        created_at: '2026-07-22T00:00:00Z',
-        updated_at: '2026-07-22T00:00:00Z',
+        connection_state: connectionState,
     }
 }
 
@@ -77,11 +48,15 @@ const scoutAccount = {
     handle: 'svc-scout',
     agent_key: 'scout',
     status: 'active',
-    server_ids: ['linear-id', 'notion-id'],
+    server_ids: ['linear-id', 'notion-id', 'github-id', 'stripe-id', 'slack-id'],
     servers: [
         grant('linear-id', 'Linear'),
-        grant('notion-id', 'Notion'),
-        grant('github-id', 'GitHub', TEAMMATE, 'team'),
+        grant('notion-id', 'Notion', TEAMMATE),
+        grant('github-id', 'GitHub', TEAMMATE),
+        grant('stripe-id', 'Stripe', YOU, 'team', 'needs_reauth'),
+        grant('slack-id', 'Slack'),
+        // Personal grants never back a scout run, so this one must not render.
+        grant('zendesk-id', 'Zendesk', YOU, 'personal'),
     ],
     last_active_at: null,
     created_at: '2026-07-22T00:00:00Z',
@@ -97,27 +72,6 @@ const meta: Meta<typeof ScoutMcpServersPicker> = {
                 '/api/projects/:id/mcp_gateway/service_accounts/': () => [
                     200,
                     { count: 1, next: null, previous: null, results: [scoutAccount] },
-                ],
-                '/api/projects/:id/mcp_gateway/servers/': () => [
-                    200,
-                    {
-                        count: 5,
-                        next: null,
-                        previous: null,
-                        results: [
-                            gatewayServer('notion-id', 'Notion'),
-                            gatewayServer('linear-id', 'Linear'),
-                            gatewayServer('stripe-id', 'Stripe', {
-                                installation_id: 'stripe-installation',
-                                is_enabled: true,
-                                pending_oauth: false,
-                                needs_reauth: true,
-                                last_used_at: null,
-                            }),
-                            gatewayServer('slack-id', 'Slack'),
-                            gatewayServer('zendesk-id', 'Zendesk', null),
-                        ],
-                    },
                 ],
             },
         }),

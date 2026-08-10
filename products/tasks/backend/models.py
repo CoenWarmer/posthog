@@ -366,13 +366,13 @@ class Task(DeletedMetaFields, models.Model):
 
     @property
     def mcp_gateway_server_allowlist(self) -> list[str] | None:
-        """Gateway server ids the run may mount from its credential owner's personal grants.
+        """Gateway server ids the run may mount, gating every grant regardless of scope.
 
         None (no snapshot) leaves mount resolution unfiltered — every non-scout task, and
         pre-snapshot rows. Once a snapshot exists, a malformed value fails closed to an empty
         allowlist: a scout whose selection is unreadable must not fall back to mounting every
-        grant its creator holds. Team-scoped grants are not gated by this list. Reads through
-        `mcp_builtin_agent_key` like the owner id: only a stamped agent task carries one.
+        reachable grant. Reads through `mcp_builtin_agent_key` like the owner id: only a
+        stamped agent task carries one.
         """
         if self.mcp_builtin_agent_key is None:
             return None

@@ -557,7 +557,7 @@ export const SignalsScoutCreateBody = /* @__PURE__ */ zod
                     .max(signalsScoutCreateBodyConfigOneMcpGatewayServerIdsMax)
                     .optional()
                     .describe(
-                        "MCP gateway servers (by id) this scout's runs may use, chosen from the connections its creator shared with the Scout agent. Selection is per scout: an empty list mounts none of the creator's connections. Connections teammates shared to the whole team are not gated by this list. Applies from the scout's next run."
+                        "MCP gateway servers (by id) this scout's runs may use, chosen from the connections members shared to the whole team. Selection is per scout: an empty list gives the scout no MCP servers. Applies from the scout's next run."
                     ),
             })
             .describe('Schedule, enablement, and delivery options accepted while creating a scout.')
@@ -703,7 +703,7 @@ export const SignalsScoutConfigCreateBody = /* @__PURE__ */ zod
             .max(signalsScoutConfigCreateBodyMcpGatewayServerIdsMax)
             .optional()
             .describe(
-                "MCP gateway servers (by id) this scout's runs may use, chosen from the connections its creator shared with the Scout agent. Selection is per scout: an empty list mounts none of the creator's connections. Connections teammates shared to the whole team are not gated by this list. Applies from the scout's next run."
+                "MCP gateway servers (by id) this scout's runs may use, chosen from the connections members shared to the whole team. Selection is per scout: an empty list gives the scout no MCP servers. Applies from the scout's next run."
             ),
         skill_name: zod
             .string()
@@ -835,7 +835,7 @@ export const SignalsScoutConfigUpdateBody = /* @__PURE__ */ zod
             .max(signalsScoutConfigUpdateBodyMcpGatewayServerIdsMax)
             .optional()
             .describe(
-                "MCP gateway servers (by id) this scout's runs may use, chosen from the connections its creator shared with the Scout agent. Selection is per scout: an empty list mounts none of the creator's connections. Connections teammates shared to the whole team are not gated by this list. Applies from the scout's next run."
+                "MCP gateway servers (by id) this scout's runs may use, chosen from the connections members shared to the whole team. Selection is per scout: an empty list gives the scout no MCP servers. Applies from the scout's next run."
             ),
     })
     .describe('Editable schedule, enablement, and emit posture for one scout config.')

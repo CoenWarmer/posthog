@@ -175,9 +175,9 @@ class MultiTurnSession:
         mount. It is separate from the acting user in `context`: the sandbox still acts
         as the acting user, but grants are personal, so a run with no owner mounts none.
 
-        `mcp_gateway_server_ids` narrows the owner's personal grants to the listed gateway
-        servers (a scout's per-scout selection). None leaves them unfiltered; an empty list
-        mounts none of them. Team-scoped grants are not gated by it.
+        `mcp_gateway_server_ids` narrows the run's mounts to the listed gateway servers
+        regardless of grant scope (a scout's per-scout selection). None leaves them
+        unfiltered; an empty list mounts nothing.
         """
         task, task_run = await create_task_and_trigger(
             prompt,
