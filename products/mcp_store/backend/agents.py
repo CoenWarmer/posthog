@@ -243,6 +243,7 @@ def resolve_gateway_agent_token(token: str) -> GatewayAgentPrincipal | None:
         return None
     # A token outlives offboarding (its max age is hours), so the owner's
     # eligibility is re-checked on every resolution, not just at mint time.
-    if not credential_owner_eligible(credential_owner_id, team_id):
+    # A personless token names nobody, so there is no owner to re-check.
+    if credential_owner_id is not None and not credential_owner_eligible(credential_owner_id, team_id):
         return None
     return GatewayAgentPrincipal(account=account, credential_owner_id=credential_owner_id)
