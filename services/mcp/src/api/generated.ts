@@ -57670,6 +57670,7 @@ export namespace Schemas {
       network_access_level?: NetworkAccessLevelEnum;
       /**
          * Allowed domains for custom network access.
+         * @maxItems 100
          * @items.maxLength 255
          */
       allowed_domains?: string[];
@@ -67120,6 +67121,7 @@ export namespace Schemas {
       network_access_level?: NetworkAccessLevelEnum;
       /**
          * Allowed domains for custom network access.
+         * @maxItems 100
          * @items.maxLength 255
          */
       allowed_domains?: string[];
