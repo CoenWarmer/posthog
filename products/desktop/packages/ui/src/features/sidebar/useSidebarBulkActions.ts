@@ -52,13 +52,22 @@ export interface SidebarBulkActions {
 }
 
 /**
- * The four bulk actions the sidebar offers over a multi-session selection,
- * shared by the bulk action bar and the bulk right-click menu so the two can't
- * drift apart.
+ * What a bulk action needs to know about a session beyond its id: only enough
+ * to say whether archiving it would stop something. Narrower than `TaskData` so
+ * both session lists can feed this without one shape dictating the other.
+ */
+export type BulkSessionInfo = Pick<
+  TaskData,
+  "id" | "isGenerating" | "taskRunEnvironment" | "taskRunStatus"
+>;
+
+/**
+ * The four bulk actions offered over a multi-session selection, shared by the
+ * action bar and the bulk right-click menu so the two can't drift apart.
  */
 export function useSidebarBulkActions(
   taskIds: string[],
-  tasks: TaskData[],
+  tasks: BulkSessionInfo[],
 ): SidebarBulkActions {
   const queryClient = useQueryClient();
   const archiveCacheKeys = useArchiveCacheKeys();
