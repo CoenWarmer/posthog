@@ -1,7 +1,7 @@
 import { useActions, useValues } from 'kea'
 
 import { IconSparkles } from '@posthog/icons'
-import { LemonBanner, LemonButton, LemonTag, SpinnerOverlay, Tooltip } from '@posthog/lemon-ui'
+import { LemonBanner, LemonButton, SpinnerOverlay } from '@posthog/lemon-ui'
 
 import { NotFound } from 'lib/components/NotFound'
 import { FEATURE_FLAGS } from 'lib/constants'
@@ -22,6 +22,7 @@ import { visionQuotaLogic } from '../logics/visionQuotaLogic'
 import { getReplayVisionEditDisabledReason } from '../utils/accessControl'
 import { formatCreditsRange } from '../utils/credits'
 import { quotaBannerState } from '../utils/quotaProjection'
+import { ScannerBackfillsTab } from './components/ScannerBackfillsTab'
 import { ScannerCalibrationTab } from './components/ScannerCalibrationTab'
 import { ScannerConfigReadonly } from './components/ScannerConfigReadonly'
 import { ScannerDigestCard } from './components/ScannerDigestCard'
@@ -31,7 +32,6 @@ import { ScannerRunTab } from './components/ScannerRunTab'
 import { VisionActionsTab } from './components/VisionActionsTab'
 import { replayScannerLogic } from './replayScannerLogic'
 import { ReplayScannerTab, replayScannerSceneLogic } from './replayScannerSceneLogic'
-import { LIMIT_REACHED_TOOLTIP } from './scannerCopy'
 
 export const scene: SceneExport = {
     component: ReplayScannerSceneComponent,
@@ -71,13 +71,6 @@ export function ReplayScannerSceneComponent(): JSX.Element {
         <SceneContent>
             <SceneTitleSection
                 name={scanner.name || 'Untitled scanner'}
-                nameSuffix={
-                    scanner.limit_reached ? (
-                        <Tooltip title={LIMIT_REACHED_TOOLTIP}>
-                            <LemonTag type="danger">Limit reached</LemonTag>
-                        </Tooltip>
-                    ) : undefined
-                }
                 description={scanner.description}
                 resourceType={{ type: 'replay_vision' }}
                 actions={
@@ -138,6 +131,11 @@ export function ReplayScannerSceneComponent(): JSX.Element {
                         key: ReplayScannerTab.OnDemand,
                         label: 'On-demand',
                         content: <ScannerRunTab scannerId={scannerId} />,
+                    },
+                    {
+                        key: ReplayScannerTab.Backfills,
+                        label: 'Backfills',
+                        content: <ScannerBackfillsTab scannerId={scannerId} />,
                     },
                     {
                         key: ReplayScannerTab.Configuration,
