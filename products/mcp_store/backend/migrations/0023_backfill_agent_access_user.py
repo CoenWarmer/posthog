@@ -1,43 +1,28 @@
 from django.db import migrations
+from django.db.models import OuterRef, Subquery
 
 
 def backfill_agent_access_user(apps, schema_editor):
-    """Attribute every agent grant to a person.
+    """Attribute each agent grant to the owner of its bound credential.
 
-    The bound credential is the strongest signal: it is a personal
-    installation, so its owner is the person whose access the agent rides. When
-    the credential has since been deleted (installation is null) the granter is
-    the next best attribution. A grant with neither is unattributable and can
-    never be mounted under per-user resolution, so it is dropped rather than
-    left behind as a row no read path can ever resolve.
+    This is an exact attribution, not a guess: every pre-personal-grant write
+    path bound the granter's own personal installation, and installation.user
+    is non-nullable. Grants whose credential has since been deleted stay
+    unattributed on purpose. They can never mount a credential under per-user
+    resolution (fail closed), and inventing an owner for them, for example from
+    granted_by, would reinstate a share the person may have ended by deleting
+    the connection. Whoever wants the sharing back re-shares, which creates a
+    fresh attributed row; the NULL row lingers harmlessly (nulls are distinct
+    under the 0024 unique index and every read path excludes them) until the
+    SET NOT NULL follow-up deletes whatever is still unattributed after the
+    rollout window.
     """
     MCPServiceAccountServerAccess = apps.get_model("mcp_store", "MCPServiceAccountServerAccess")
+    MCPServerInstallation = apps.get_model("mcp_store", "MCPServerInstallation")
 
-    rows = (
-        MCPServiceAccountServerAccess.objects.filter(user__isnull=True)
-        .select_related("installation")
-        .order_by("id")
-        .iterator(chunk_size=500)
+    MCPServiceAccountServerAccess.objects.filter(user__isnull=True, installation__isnull=False).update(
+        user_id=Subquery(MCPServerInstallation.objects.filter(pk=OuterRef("installation_id")).values("user_id")[:1])
     )
-    pending: list = []
-    unattributable: list = []
-    for row in rows:
-        owner_id = row.installation.user_id if row.installation is not None else row.granted_by_id
-        if owner_id is None:
-            unattributable.append(row.id)
-            continue
-        row.user_id = owner_id
-        pending.append(row)
-        if len(pending) >= 500:
-            MCPServiceAccountServerAccess.objects.bulk_update(pending, ["user"])
-            pending = []
-        if len(unattributable) >= 500:
-            MCPServiceAccountServerAccess.objects.filter(id__in=unattributable).delete()
-            unattributable = []
-    if pending:
-        MCPServiceAccountServerAccess.objects.bulk_update(pending, ["user"])
-    if unattributable:
-        MCPServiceAccountServerAccess.objects.filter(id__in=unattributable).delete()
 
 
 class Migration(migrations.Migration):
