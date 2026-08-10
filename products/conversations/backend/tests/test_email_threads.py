@@ -13,6 +13,7 @@ from products.conversations.backend.models import (
     EMAIL_THREAD_COMMENT_SCOPE,
     EmailThread,
     EmailThreadAccess,
+    EmailThreadAccountLink,
     EmailThreadMessage,
     EmailThreadMessageDirection,
     EmailThreadParticipant,
@@ -170,6 +171,13 @@ class TestEmailThreadPersistence(BaseTest):
             thread=thread,
             user=self.user,
         )
+        EmailThreadAccountLink.objects.for_team(self.team.id).create(
+            team=self.team,
+            thread=thread,
+            account_id="account-1",
+            account_external_id="group-1",
+            match_source="known_email",
+        )
         orphaned_content = Comment.objects.create(
             team=self.team,
             scope=EMAIL_THREAD_COMMENT_SCOPE,
@@ -189,5 +197,6 @@ class TestEmailThreadPersistence(BaseTest):
         assert not EmailThreadMessage.objects.for_team(self.team.id).filter(id=message.id).exists()
         assert not EmailThreadParticipant.objects.for_team(self.team.id).filter(thread_id=thread.id).exists()
         assert not EmailThreadAccess.objects.for_team(self.team.id).filter(thread_id=thread.id).exists()
+        assert not EmailThreadAccountLink.objects.for_team(self.team.id).filter(thread_id=thread.id).exists()
         assert not Comment.objects.filter(id__in=[message.comment_id, orphaned_content.id]).exists()
         assert Comment.objects.filter(id=unrelated.id).exists()

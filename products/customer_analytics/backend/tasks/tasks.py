@@ -2,6 +2,10 @@ from celery import shared_task
 
 from posthog.models.scoping import with_team_scope
 
+from products.customer_analytics.backend.facade.email_matching import (
+    clear_email_thread_link_recalculation_schedule,
+    recalculate_email_thread_links,
+)
 from products.customer_analytics.backend.logic.announcements import send_pending_deliveries
 from products.customer_analytics.backend.logic.custom_property_sync import run_custom_property_sync
 
@@ -9,6 +13,20 @@ from products.customer_analytics.backend.logic.custom_property_sync import run_c
 @shared_task(name="customer_analytics.process_custom_property_sync", ignore_result=True)
 def process_custom_property_sync(team_id: int, saved_query_id: str) -> None:
     run_custom_property_sync(team_id=team_id, saved_query_id=saved_query_id)
+
+
+@shared_task(
+    name="customer_analytics.recalculate_email_thread_account_links",
+    ignore_result=True,
+    autoretry_for=(Exception,),
+    max_retries=3,
+    retry_backoff=True,
+    retry_jitter=True,
+)
+@with_team_scope()
+def recalculate_email_thread_account_links(team_id: int) -> None:
+    recalculate_email_thread_links(team_id)
+    clear_email_thread_link_recalculation_schedule(team_id)
 
 
 # autoretry_for is load-bearing: bare max_retries kwargs without it are silently inert.
