@@ -60,8 +60,8 @@ REPLAY_VISION_MISSION_PASSES = Counter(
 
 REPLAY_VISION_QUOTA_EXHAUSTED_SKIPS = Counter(
     "replay_vision_quota_exhausted_skips_total",
-    "Observations skipped because a credit limit was exhausted, by which limit bound",
-    ["scanner_type", "scope"],
+    "Observations skipped because the org's monthly credit quota was exhausted",
+    ["scanner_type"],
 )
 
 REPLAY_VISION_CREDITS_CONSUMED = Counter(
@@ -70,18 +70,16 @@ REPLAY_VISION_CREDITS_CONSUMED = Counter(
     ["scanner_type", "model"],
 )
 
-REPLAY_VISION_SWEEP_OUTCOMES = Counter(
-    "replay_vision_sweep_outcomes_total",
-    "Sweep tick outcomes: throttled at an in-flight cap, capped by the scanner's own credit limit "
-    "(settled spend, which skips the window for good, or in-flight reservations, which preserve the "
-    "watermark), no candidates, or candidates found",
+REPLAY_VISION_BACKFILL_TICK_OUTCOMES = Counter(
+    "replay_vision_backfill_tick_outcomes_total",
+    "Backfill tick outcomes: dispatched, throttled, paused on quota, skipped, or completed",
     ["outcome"],
 )
 
-REPLAY_VISION_SCANNER_LIMIT_REACHED = Counter(
-    "replay_vision_scanner_limit_reached_total",
-    "Requests refused because a per-scanner credit limit left no room, by the API surface that refused",
-    ["surface"],
+REPLAY_VISION_SWEEP_OUTCOMES = Counter(
+    "replay_vision_sweep_outcomes_total",
+    "Sweep tick outcomes: throttled at an in-flight cap, no candidates, or candidates found",
+    ["outcome"],
 )
 
 REPLAY_VISION_SWEEP_CANDIDATES = Counter(
@@ -168,17 +166,9 @@ def record_mission_pass(model: str, path: str) -> None:
     _otel.record_counter_twin(REPLAY_VISION_MISSION_PASSES, 1, labels)
 
 
-def record_quota_exhausted_skip(scanner_type: str, scope: str) -> None:
-    """`scope` is "org" for the organization's monthly limit, "scanner" for a per-scanner limit."""
-    labels = {"scanner_type": scanner_type, "scope": scope}
-    REPLAY_VISION_QUOTA_EXHAUSTED_SKIPS.labels(**labels).inc()
-    _otel.record_counter_twin(REPLAY_VISION_QUOTA_EXHAUSTED_SKIPS, 1, labels)
-
-
-def record_scanner_limit_reached(surface: str) -> None:
-    """`surface` is "on_demand", "bulk", or "evaluation": the API path that refused the request."""
-    REPLAY_VISION_SCANNER_LIMIT_REACHED.labels(surface=surface).inc()
-    _otel.record_counter_twin(REPLAY_VISION_SCANNER_LIMIT_REACHED, 1, {"surface": surface})
+def record_quota_exhausted_skip(scanner_type: str) -> None:
+    REPLAY_VISION_QUOTA_EXHAUSTED_SKIPS.labels(scanner_type=scanner_type).inc()
+    _otel.record_counter_twin(REPLAY_VISION_QUOTA_EXHAUSTED_SKIPS, 1, {"scanner_type": scanner_type})
 
 
 def record_credits_consumed(scanner_type: str, model: str, credits: int) -> None:
@@ -193,6 +183,11 @@ def record_sweep_outcome(outcome: str, candidates: int = 0) -> None:
     if candidates > 0:
         REPLAY_VISION_SWEEP_CANDIDATES.inc(candidates)
         _otel.record_counter_twin(REPLAY_VISION_SWEEP_CANDIDATES, candidates, {})
+
+
+def record_backfill_tick_outcome(outcome: str) -> None:
+    REPLAY_VISION_BACKFILL_TICK_OUTCOMES.labels(outcome=outcome).inc()
+    _otel.record_counter_twin(REPLAY_VISION_BACKFILL_TICK_OUTCOMES, 1, {"outcome": outcome})
 
 
 def record_observation_e2e(scanner_type: str, seconds: float) -> None:

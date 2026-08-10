@@ -5,7 +5,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
-from products.replay_vision.backend.temporal.constants import MAX_SESSION_ID_LENGTH
+from products.replay_vision.backend.session_limits import MAX_SESSION_ID_LENGTH
 
 
 class SweepScannerInputs(BaseModel, frozen=True):
@@ -46,16 +46,6 @@ class FindScannerCandidatesOutput(BaseModel, frozen=True):
 class RefreshPromptSuggestionInputs(BaseModel, frozen=True):
     scanner_id: UUID
     team_id: int
-
-
-class CheckScannerBudgetInputs(BaseModel, frozen=True):
-    scanner_id: UUID
-    team_id: int
-
-
-class CheckScannerBudgetOutput(BaseModel, frozen=True):
-    # Defaults to not-capped so a replayed history missing this field decodes to "keep sweeping".
-    capped: bool = False
 
 
 class AdvanceScannerWatermarkInputs(BaseModel, frozen=True):
