@@ -228,10 +228,6 @@ import type {
     ColumnConfigurationApi,
     PaginatedColumnConfigurationListApi,
 } from 'products/product_analytics/frontend/generated/api.schemas'
-import type {
-    SessionGroupSummaryListItemType,
-    SessionGroupSummaryType,
-} from 'products/session_summaries/frontend/types'
 import {
     SignalReport,
     SignalReportArtefact,
@@ -2025,17 +2021,6 @@ export class ApiRequest {
 
     public evaluationRuns(teamId?: TeamType['id']): ApiRequest {
         return this.environmentsDetail(teamId).addPathComponent('evaluation_runs')
-    }
-
-    // Session summary
-
-    // Session group summaries
-    public sessionGroupSummaries(projectId?: ProjectType['id']): ApiRequest {
-        return this.projectsDetail(projectId).addPathComponent('session_group_summaries')
-    }
-
-    public sessionGroupSummary(id: string, projectId?: ProjectType['id']): ApiRequest {
-        return this.sessionGroupSummaries(projectId).addPathComponent(id)
     }
 
     // Heatmap screenshots
@@ -5040,26 +5025,6 @@ const api = {
                 signal,
                 headers: lastEventId ? { 'Last-Event-ID': lastEventId } : undefined,
             })
-        },
-    },
-
-    sessionGroupSummaries: {
-        async get(id: string): Promise<SessionGroupSummaryType> {
-            return await new ApiRequest().sessionGroupSummary(id).get()
-        },
-        async list(
-            params: {
-                created_by?: string
-                search?: string
-                order?: string
-                limit?: number
-                offset?: number
-            } = {}
-        ): Promise<CountedPaginatedResponse<SessionGroupSummaryListItemType>> {
-            return await new ApiRequest().sessionGroupSummaries().withQueryString(toParams(params)).get()
-        },
-        async delete(id: string): Promise<void> {
-            return await new ApiRequest().sessionGroupSummary(id).delete()
         },
     },
 
