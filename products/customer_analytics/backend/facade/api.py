@@ -45,9 +45,17 @@ from posthog.models.tagged_item import TaggedItem
 from posthog.models.team import Team
 
 from products.conversations.backend.facade.api import (
+    AccountEmailThreadDetail as AccountEmailThreadDetail,
+    AccountEmailThreadMessage as AccountEmailThreadMessage,
+    AccountEmailThreadSummary as AccountEmailThreadSummary,
+    EmailThreadAddress as EmailThreadAddress,
+    EmailThreadOwnerSummary as EmailThreadOwnerSummary,
+    EmailThreadParticipantSummary as EmailThreadParticipantSummary,
     SupportSlackChannelsUnavailable,
     SupportSlackNotConfigured,
     TicketSummary as TicketSummary,
+    get_account_email_thread,
+    list_account_email_threads,
     list_account_tickets,
 )
 from products.customer_analytics.backend.account_urls import build_account_deeplink as build_account_deeplink
@@ -2563,6 +2571,34 @@ def get_account_support_tickets(
     if account is None or not account.external_id:
         return []
     return list_account_tickets(team_id, account.external_id, limit=limit)
+
+
+def get_account_email_threads(
+    team_id: int,
+    account_id: str,
+    user_access_control: "UserAccessControl",
+    *,
+    offset: int = 0,
+    limit: int = 50,
+) -> tuple[list[AccountEmailThreadSummary], int] | None:
+    if get_accessible_account_id(team_id, account_id, user_access_control) is None:
+        return None
+    if not user_access_control.check_access_level_for_resource("ticket", "viewer"):
+        raise ResourceForbiddenError()
+    return list_account_email_threads(team_id, account_id, offset=offset, limit=limit)
+
+
+def get_account_email_thread_detail(
+    team_id: int,
+    account_id: str,
+    thread_id: str,
+    user_access_control: "UserAccessControl",
+) -> AccountEmailThreadDetail | None:
+    if get_accessible_account_id(team_id, account_id, user_access_control) is None:
+        return None
+    if not user_access_control.check_access_level_for_resource("ticket", "viewer"):
+        raise ResourceForbiddenError()
+    return get_account_email_thread(team_id, account_id, thread_id)
 
 
 def list_calendar_sync_statuses(team_id: int) -> list[contracts.CalendarSyncStatus]:
