@@ -41,6 +41,12 @@ RESPONSE_CHUNK_BYTES = 256 * 1024
 # and far above a slow-drip stall.
 MAX_DOWNLOAD_SECONDS = 300
 
+# The gateway /auth body is a single JWT (a few KiB at most), so it gets far tighter caps than a
+# data page. The gateway server is user-supplied too, so the same unbounded-buffering and
+# slow-drip concerns apply — a token exchange just has no legitimate reason to be big or slow.
+MAX_JWT_RESPONSE_BYTES = 64 * 1024
+MAX_JWT_DOWNLOAD_SECONDS = 30
+
 RESPONSE_TOO_LARGE_ERROR = "Qualys API response body was too large"
 RESPONSE_TOO_SLOW_ERROR = "Qualys API response download was too slow"
 # Raised when a JWT-authenticated endpoint (KnowledgeBase on 4.0) is synced but no gateway URL is
@@ -65,30 +71,35 @@ class QualysVmdrResponseTooSlowError(Exception):
     """Non-retryable: a host dribbling one page's body will dribble it again on retry."""
 
 
-def _read_capped_body(response: requests.Response) -> bytes:
-    """Stream the body into memory, aborting past MAX_RESPONSE_BYTES or MAX_DOWNLOAD_SECONDS.
+def _read_capped_body(
+    response: requests.Response,
+    max_bytes: int | None = None,
+    max_seconds: int | None = None,
+) -> bytes:
+    """Stream the body into memory, aborting past `max_bytes` or `max_seconds`.
 
-    The API server is user-supplied, so a body must never be buffered unbounded (size cap) nor be
-    allowed to hold the connection open indefinitely by dribbling under the per-read timeout (time
-    cap). Both limits are non-retryable — re-fetching the same page yields the same oversized/slow
-    body.
+    The hosts we talk to are user-supplied, so a body must never be buffered unbounded (size cap)
+    nor be allowed to hold the connection open indefinitely by dribbling under the per-read timeout
+    (time cap). Both limits are non-retryable — re-fetching the same page yields the same
+    oversized/slow body. Defaults suit a data page; the gateway token exchange passes its own much
+    tighter caps.
     """
+    max_bytes = MAX_RESPONSE_BYTES if max_bytes is None else max_bytes
+    max_seconds = MAX_DOWNLOAD_SECONDS if max_seconds is None else max_seconds
     chunks: list[bytes] = []
     total = 0
-    deadline = time.monotonic() + MAX_DOWNLOAD_SECONDS
+    deadline = time.monotonic() + max_seconds
     try:
         for chunk in response.iter_content(chunk_size=RESPONSE_CHUNK_BYTES):
             if time.monotonic() > deadline:
                 raise QualysVmdrResponseTooSlowError(
-                    f"{RESPONSE_TOO_SLOW_ERROR}: exceeded {MAX_DOWNLOAD_SECONDS}s download budget"
+                    f"{RESPONSE_TOO_SLOW_ERROR}: exceeded {max_seconds}s download budget"
                 )
             if not chunk:
                 continue
             total += len(chunk)
-            if total > MAX_RESPONSE_BYTES:
-                raise QualysVmdrResponseTooLargeError(
-                    f"{RESPONSE_TOO_LARGE_ERROR}: exceeded {MAX_RESPONSE_BYTES} bytes"
-                )
+            if total > max_bytes:
+                raise QualysVmdrResponseTooLargeError(f"{RESPONSE_TOO_LARGE_ERROR}: exceeded {max_bytes} bytes")
             chunks.append(chunk)
     finally:
         response.close()
@@ -150,17 +161,27 @@ def _fetch_jwt(gateway_server: str, username: str, password: str, logger: Filter
     """
     gateway_url = build_base_url(gateway_server)
     _check_url_allowed(gateway_url)
-    session = make_tracked_session(headers=_BASE_HEADERS, redact_values=(password,), allow_redirects=False)
+    # `capture=False`: the response body is the raw minted JWT, which the name-based sample
+    # scrubbers can't recognise (and it doesn't exist yet to be listed in `redact_values`), so the
+    # exchange is metered and logged but never written to HTTP sample storage.
+    session = make_tracked_session(
+        headers=_BASE_HEADERS, redact_values=(password,), allow_redirects=False, capture=False
+    )
+    # stream=True so a hostile gateway host can't make us buffer an unbounded body — the token is
+    # read under the tight JWT caps below.
     response = session.post(
         f"{gateway_url}/auth",
         data={"username": username, "password": password, "token": "true"},
         headers={"Content-Type": "application/x-www-form-urlencoded"},
         timeout=30,
+        stream=True,
     )
     if not response.ok:
+        response.close()
         logger.error(f"Qualys gateway auth error: status={response.status_code}")
         response.raise_for_status()
-    token = response.text.strip()
+    body = _read_capped_body(response, max_bytes=MAX_JWT_RESPONSE_BYTES, max_seconds=MAX_JWT_DOWNLOAD_SECONDS)
+    token = body.decode(response.encoding or "utf-8", errors="replace").strip()
     if not token:
         raise ValueError("Qualys gateway returned an empty JWT")
     return token

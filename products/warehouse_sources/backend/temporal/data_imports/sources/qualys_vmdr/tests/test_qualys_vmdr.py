@@ -480,6 +480,43 @@ class TestQualysVmdr:
             "token": "true",
         }
 
+    def test_fetch_jwt_session_opts_out_of_sample_capture(self):
+        # The /auth response body is the raw minted JWT: the name-based sample scrubbers can't
+        # recognise it and it can't be listed in `redact_values` (it doesn't exist yet), so the
+        # exchange must be excluded from HTTP sample capture entirely.
+        gateway_session = mock.MagicMock()
+        gateway_session.post.return_value = _response(status_code=200, text="jwt-token")
+
+        with (
+            mock.patch(f"{_MODULE}.make_tracked_session", return_value=gateway_session) as make_tracked,
+            mock.patch(f"{_MODULE}.is_url_allowed", return_value=(True, None)),
+        ):
+            _fetch_jwt("gateway.qg2.apps.qualys.com", "user", "pass", mock.MagicMock())
+
+        assert make_tracked.call_args.kwargs["capture"] is False
+        # The password is still redacted from the metered request, and the body is streamed
+        # rather than buffered whole.
+        assert make_tracked.call_args.kwargs["redact_values"] == ("pass",)
+        assert gateway_session.post.call_args.kwargs["stream"] is True
+
+    def test_fetch_jwt_refuses_an_oversized_gateway_body(self):
+        # `gateway_server` is user-supplied, so a host that returns a huge (or slow-dripped) body
+        # must not be able to exhaust a shared worker's memory.
+        gateway_session = mock.MagicMock()
+        response = _response(status_code=200)
+        response.iter_content.return_value = iter([b"a" * 1024, b"b" * 1024])
+        gateway_session.post.return_value = response
+
+        with (
+            mock.patch(f"{_MODULE}.make_tracked_session", return_value=gateway_session),
+            mock.patch(f"{_MODULE}.is_url_allowed", return_value=(True, None)),
+            mock.patch(f"{_MODULE}.MAX_JWT_RESPONSE_BYTES", 1500),
+        ):
+            with pytest.raises(QualysVmdrResponseTooLargeError):
+                _fetch_jwt("gateway.qg2.apps.qualys.com", "user", "pass", mock.MagicMock())
+
+        response.close.assert_called_once()
+
     def test_fetch_jwt_raises_on_empty_token(self):
         gateway_session = mock.MagicMock()
         gateway_session.post.return_value = _response(status_code=200, text="   ")
