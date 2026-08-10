@@ -12,7 +12,6 @@ import { ObservationsDock } from 'products/replay_vision/frontend/components/Obs
 
 import { playerSettingsLogic } from './playerSettingsLogic'
 import { PlayerSidebar } from './PlayerSidebar'
-import { PlayerSummaryDock } from './PlayerSummaryDock'
 import { PurePlayer } from './PurePlayer'
 import {
     SessionRecordingPlayerLogicProps,
@@ -99,11 +98,11 @@ function SessionRecordingPlayerInternal({
     const { isVerticallyStacked, sidebarOpen } = useValues(playerSettingsLogic)
     const { logicProps } = useValues(sessionRecordingPlayerLogic)
     const { featureFlags } = useValues(featureFlagLogic)
-    const showSummaryDock =
+    const showVisionDock =
         !noMeta &&
         !noDock &&
-        (logicProps.mode ?? SessionRecordingPlayerMode.Standard) === SessionRecordingPlayerMode.Standard
-    const showVisionDock = showSummaryDock && !!featureFlags[FEATURE_FLAGS.REPLAY_VISION]
+        (logicProps.mode ?? SessionRecordingPlayerMode.Standard) === SessionRecordingPlayerMode.Standard &&
+        !!featureFlags[FEATURE_FLAGS.REPLAY_VISION]
 
     return (
         <div
@@ -114,7 +113,7 @@ function SessionRecordingPlayerInternal({
         >
             <div className="flex flex-col flex-1 min-w-0 min-h-0">
                 <PurePlayer noMeta={noMeta} noBorder={noBorder} />
-                {showVisionDock ? <ObservationsDock /> : showSummaryDock && <PlayerSummaryDock />}
+                {showVisionDock && <ObservationsDock />}
             </div>
             {withSidebar && <PlayerSidebar />}
         </div>

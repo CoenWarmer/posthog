@@ -21,7 +21,6 @@ import { SchemaPropertyGroup } from 'scenes/data-management/schema/schemaManagem
 import { MaxBillingContext } from 'scenes/max/maxBillingContextLogic'
 import { NotebookListItemType, NotebookNodeResource, NotebookType } from 'scenes/notebooks/types'
 import { RecordingComment } from 'scenes/session-recordings/player/inspector/playerInspectorLogic'
-import { SessionSummaryContent } from 'scenes/session-recordings/player/player-meta/types'
 import { LINK_PAGE_SIZE, SURVEY_PAGE_SIZE } from 'scenes/surveys/constants'
 
 import { getCurrentExporterData, isSharedView } from '~/exporter/exporterViewLogic'
@@ -193,7 +192,6 @@ import {
     SessionRecordingSnapshotResponse,
     SessionRecordingType,
     SessionRecordingUpdateType,
-    SessionSummaryResponse,
     SharingConfigurationType,
     SlackChannelType,
     SubscriptionType,
@@ -233,7 +231,6 @@ import type {
 import type {
     SessionGroupSummaryListItemType,
     SessionGroupSummaryType,
-    SessionSummariesConfig,
 } from 'products/session_summaries/frontend/types'
 import {
     SignalReport,
@@ -2031,9 +2028,6 @@ export class ApiRequest {
     }
 
     // Session summary
-    public sessionSummary(teamId?: TeamType['id']): ApiRequest {
-        return this.environmentsDetail(teamId).addPathComponent('session_summaries')
-    }
 
     // Session group summaries
     public sessionGroupSummaries(projectId?: ProjectType['id']): ApiRequest {
@@ -7433,29 +7427,6 @@ const api = {
 
         async regenerate(id: number | string): Promise<HeatmapScreenshotType> {
             return await new ApiRequest().heatmapScreenshotSaved(id).withAction('regenerate').create()
-        },
-    },
-
-    sessionSummaries: {
-        async create(data: { session_ids: string[]; focus_area?: string }): Promise<SessionSummaryResponse> {
-            return await new ApiRequest().sessionSummary().withAction('create_session_summaries').create({ data })
-        },
-        async createIndividual(data: {
-            session_ids: string[]
-            focus_area?: string
-        }): Promise<Record<string, SessionSummaryContent>> {
-            return await new ApiRequest()
-                .sessionSummary()
-                .withAction('create_session_summaries_individually')
-                .create({ data })
-        },
-        config: {
-            async get(): Promise<SessionSummariesConfig> {
-                return await new ApiRequest().sessionSummary().withAction('config').get()
-            },
-            async update(data: Partial<SessionSummariesConfig>): Promise<SessionSummariesConfig> {
-                return await new ApiRequest().sessionSummary().withAction('config').update({ data })
-            },
         },
     },
 
