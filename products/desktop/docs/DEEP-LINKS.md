@@ -92,7 +92,7 @@ posthog-code://task/abc123/run/xyz789
 
 ### `posthog-code://inbox/<reportId>`
 
-Open a report canvas in the `#general` space.
+Open a report canvas in the space that contains reports.
 
 | Segment | Required | Description |
 |---|---|---|

@@ -30,9 +30,9 @@ import {
 import { useChannelsLayout } from "@posthog/ui/features/canvas/hooks/useChannelsLayout";
 import { useChannelTaskMutations } from "@posthog/ui/features/canvas/hooks/useChannelTasks";
 import { useFolderInstructions } from "@posthog/ui/features/canvas/hooks/useFolderInstructions";
-import { GENERAL_SPACE_NAME } from "@posthog/ui/features/canvas/hooks/useGeneralSpace";
+import { useReportSpace } from "@posthog/ui/features/canvas/hooks/useReportSpace";
 import { useTaskChannels } from "@posthog/ui/features/canvas/hooks/useTaskChannels";
-import { GeneralReportSessions } from "@posthog/ui/features/canvas/reports/GeneralReportSessions";
+import { ReportSessions } from "@posthog/ui/features/canvas/reports/ReportSessions";
 import { useThreadPanelStore } from "@posthog/ui/features/canvas/stores/threadPanelStore";
 import { SuggestedPromptCard } from "@posthog/ui/features/task-detail/components/SuggestedPromptCard";
 import { taskDetailQuery } from "@posthog/ui/features/tasks/queries";
@@ -57,8 +57,8 @@ export function WebsiteChannelHome({ channelId }: { channelId: string }) {
   const { channels, isLoading: isLoadingChannels } = useTaskChannels();
   const channel = channels.find((c) => c.id === channelId);
   const channelName = channel?.name;
-  const isGeneralSpace =
-    channel?.channel_type === "public" && channelName === GENERAL_SPACE_NAME;
+  const { reportSpaceId } = useReportSpace();
+  const isReportSpace = channelId === reportSpaceId;
   const { fileTask } = useChannelTaskMutations();
 
   // Poll while empty so the intro's context.md card flips to "created" when
@@ -237,8 +237,8 @@ export function WebsiteChannelHome({ channelId }: { channelId: string }) {
       : isBuildingContextMd
         ? "building"
         : "none";
-  const intro = isGeneralSpace ? (
-    <GeneralReportSessions channelId={channelId} />
+  const intro = isReportSpace ? (
+    <ReportSessions channelId={channelId} />
   ) : !isPersonal && channelName && channel ? (
     <ChannelIntro
       channel={channel}
@@ -289,7 +289,7 @@ export function WebsiteChannelHome({ channelId }: { channelId: string }) {
           channelId={channelId}
           tasks={tasks}
           pending={visiblePending}
-          systemMessages={isGeneralSpace ? undefined : systemMessages}
+          systemMessages={isReportSpace ? undefined : systemMessages}
           isLoading={isLoading}
           emptyState={emptyState}
           intro={intro}
