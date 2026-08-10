@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
     starred: boolean;
   }[],
   channelsLoading: false,
+  createChannel: vi.fn(),
   archivedTaskIds: new Set<string>(),
   navigateToArchived: vi.fn(),
   track: vi.fn(),
@@ -33,6 +34,9 @@ vi.mock("@posthog/ui/features/canvas/hooks/useChannels", () => ({
   useChannels: () => ({
     channels: mocks.channels,
     isLoading: mocks.channelsLoading,
+  }),
+  useChannelMutations: () => ({
+    createChannel: mocks.createChannel,
   }),
 }));
 vi.mock("@posthog/ui/features/archive/useArchivedTaskIds", () => ({
@@ -118,6 +122,7 @@ describe("ChannelsSidebar", () => {
     mocks.channelsLayout = false;
     mocks.channels = [];
     mocks.channelsLoading = false;
+    mocks.createChannel.mockResolvedValue({ id: "general-id" });
     mocks.archivedTaskIds = new Set();
     mocks.track.mockClear();
     mocks.routeChannelId = undefined;
