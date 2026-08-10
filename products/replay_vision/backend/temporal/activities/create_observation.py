@@ -13,11 +13,26 @@ from products.replay_vision.backend.enqueue_claims import release_enqueue_claim
 from products.replay_vision.backend.models.replay_observation import ObservationStatus, ReplayObservation
 from products.replay_vision.backend.models.replay_scanner import ReplayScanner
 from products.replay_vision.backend.models.replay_scanner_backfill import BackfillStatus, ReplayScannerBackfill
-from products.replay_vision.backend.quota import quota_state
+from products.replay_vision.backend.quota import compute_scanner_budget, quota_state
 from products.replay_vision.backend.temporal.decorators import track_activity
 from products.replay_vision.backend.temporal.metrics import record_consent_skip, record_quota_exhausted_skip
 from products.replay_vision.backend.temporal.snapshots import BackfillScannerSnapshot, ScannerSnapshot
 from products.replay_vision.backend.temporal.types import CreateObservationInputs, CreateObservationOutput
+
+
+def _existing_row_output(inputs: CreateObservationInputs) -> CreateObservationOutput | None:
+    existing = ReplayObservation.objects.filter(scanner_id=inputs.scanner_id, session_id=inputs.session_id).first()
+    if existing is None:
+        return None
+    # Route through the validator so a malformed legacy snapshot surfaces as a tagged non-retryable error.
+    existing_snapshot = ScannerSnapshot.load_for(existing.id, existing.scanner_snapshot)
+    # A still-PENDING row stamped with our own workflow id is our earlier lost-result insert; reclaim it.
+    reclaimed = existing.workflow_id == inputs.workflow_id and existing.status == ObservationStatus.PENDING
+    return CreateObservationOutput(
+        observation_id=existing.id,
+        was_created=reclaimed,
+        scanner_type=existing_snapshot.scanner_type,
+    )
 
 
 def _build_scanner_snapshot(scanner: ReplayScanner) -> dict[str, Any]:
@@ -100,7 +115,7 @@ def _create_observation(inputs: CreateObservationInputs) -> CreateObservationOut
     # Deliberately check-then-act: the snapshot doesn't count enqueue claims, so a concurrent burst can
     # overshoot by at most the in-flight caps allow, which is accepted.
     if quota_state(scanner.team.organization_id).would_exceed(observation_credits_for_model(priced_model)):
-        record_quota_exhausted_skip(scanner.scanner_type)
+        record_quota_exhausted_skip(scanner.scanner_type, "org")
         activity.logger.info(
             "Skipping observation: monthly quota exhausted",
             extra={"scanner_id": str(inputs.scanner_id), "team_id": inputs.team_id, "session_id": inputs.session_id},
@@ -113,6 +128,36 @@ def _create_observation(inputs: CreateObservationInputs) -> CreateObservationOut
 
     try:
         with transaction.atomic():
+            # Capped scanners serialize admissions on the row lock so concurrent applies cannot overshoot
+            # the cap; uncapped scanners keep the lock-free path. The limit is re-read under the lock.
+            if scanner.credit_limit is not None:
+                locked = (
+                    ReplayScanner.objects.select_for_update().filter(pk=scanner.pk).only("pk", "credit_limit").first()
+                )
+                if locked is not None and locked.credit_limit is not None:
+                    scanner_budget = compute_scanner_budget(scanner)
+                    if scanner_budget.blocked:
+                        # A retry's own first insert counts as in-flight spend, so reclaim it
+                        # (as the UniqueViolation path does) instead of stranding it PENDING.
+                        if (existing_output := _existing_row_output(inputs)) is not None:
+                            return existing_output
+                        record_quota_exhausted_skip(scanner.scanner_type, "scanner")
+                        activity.logger.info(
+                            "Skipping observation: scanner credit limit reached",
+                            extra={
+                                "scanner_id": str(inputs.scanner_id),
+                                "team_id": inputs.team_id,
+                                "session_id": inputs.session_id,
+                                "credit_limit": scanner_budget.credit_limit,
+                                "credits_used": scanner_budget.credits_used,
+                            },
+                        )
+                        return CreateObservationOutput(
+                            observation_id=None,
+                            was_created=False,
+                            scanner_type=scanner.scanner_type,
+                        )
+
             observation = ReplayObservation.objects.create(
                 scanner=scanner,
                 team=scanner.team,
@@ -128,22 +173,14 @@ def _create_observation(inputs: CreateObservationInputs) -> CreateObservationOut
         # Only swallow the dedup case; FK / CHECK violations should fail the activity.
         if not isinstance(e.__cause__, psycopg.errors.UniqueViolation):
             raise
-        existing = ReplayObservation.objects.filter(scanner_id=inputs.scanner_id, session_id=inputs.session_id).first()
-        if existing is None:
+        existing_output = _existing_row_output(inputs)
+        if existing_output is None:
             # Conflicting row was deleted between INSERT and SELECT; let Temporal retry the INSERT.
             raise ApplicationError(
                 f"Observation for ({inputs.scanner_id}, {inputs.session_id}) was deleted mid-create",
                 non_retryable=False,
             )
-        # Route through the validator so a malformed legacy snapshot surfaces as a tagged non-retryable error.
-        existing_snapshot = ScannerSnapshot.load_for(existing.id, existing.scanner_snapshot)
-        # A still-PENDING row stamped with our own workflow id is our earlier lost-result insert — reclaim it.
-        reclaimed = existing.workflow_id == inputs.workflow_id and existing.status == ObservationStatus.PENDING
-        return CreateObservationOutput(
-            observation_id=existing.id,
-            was_created=reclaimed,
-            scanner_type=existing_snapshot.scanner_type,
-        )
+        return existing_output
 
     return CreateObservationOutput(
         observation_id=observation.id,
