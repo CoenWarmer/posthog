@@ -1171,9 +1171,7 @@ export const replayScannerLogic = kea<replayScannerLogicType>([
                     // the moment it is saved.
                     cannotAffordOneScan:
                         limit !== null && creditsPerObservation !== null && limit < creditsPerObservation,
-                    // Seeded with headroom above the forecast rather than exactly on it, so the limit doesn't
-                    // bind the moment normal month-to-month variance nudges usage up. With no estimate yet,
-                    // or a zero one, NaN leaves the field empty rather than inventing a number.
+                    // No estimate yet, or a zero one: NaN leaves the field empty rather than inventing a number.
                     seedValue:
                         estimatedMonthly !== null && estimatedMonthly > 0
                             ? Math.max(1, Math.round(estimatedMonthly * CREDIT_LIMIT_SEED_HEADROOM))
