@@ -34,13 +34,7 @@ from products.tasks.backend.logic.services.connection_token import (
     get_sandbox_jwt_public_key,
 )
 from products.tasks.backend.logic.services.network_policy import compile_network_policy
-from products.tasks.backend.logic.services.sandbox import (
-    ExecutionResult,
-    Sandbox,
-    SandboxBase,
-    SandboxConfig,
-    SandboxTemplate,
-)
+from products.tasks.backend.logic.services.sandbox import ExecutionResult, Sandbox, SandboxConfig, SandboxTemplate
 from products.tasks.backend.logic.services.sandbox_usage import measure_sandbox_cpu_usage, open_sandbox_session
 from products.tasks.backend.models import SandboxSnapshot, Task, TaskRun
 from products.tasks.backend.temporal.metrics import (
