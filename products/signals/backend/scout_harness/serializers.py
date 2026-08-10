@@ -2096,6 +2096,8 @@ def _validate_scout_model(value: str | None, context: dict, current: str | None 
     if value not in catalog:
         raise serializers.ValidationError(f"Not an available model. Available models: {', '.join(sorted(catalog))}.")
     return value
+
+
 # One scout should never need anywhere near this many external tools; the cap only bounds
 # abuse of the JSON column.
 MAX_SCOUT_MCP_GATEWAY_SERVERS = 100
@@ -2457,6 +2459,7 @@ class SignalScoutConfigUpdateSerializer(serializers.ModelSerializer):
 
     def validate_structured_output_schema(self, value: dict | None) -> dict | None:
         return _validate_structured_output_schema(value)
+
     def validate_mcp_gateway_server_ids(self, value: list[UUID]) -> list[str]:
         return _normalize_mcp_gateway_server_ids(value)
 
@@ -2628,6 +2631,7 @@ class SignalScoutConfigOptionsSerializer(serializers.Serializer):
 
     def validate_structured_output_schema(self, value: dict | None) -> dict | None:
         return _validate_structured_output_schema(value)
+
     def validate_mcp_gateway_server_ids(self, value: list[UUID]) -> list[str]:
         return _normalize_mcp_gateway_server_ids(value)
 
