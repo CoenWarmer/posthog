@@ -320,24 +320,28 @@ function CreditLimitOverview({ scannerId }: { scannerId: string }): JSX.Element 
     }
     const { used, limit, usedPct, limitReached } = creditLimitStats
     return (
-        <OverviewPanel
-            title="Spend against limit"
-            subtitle={limitReached ? <LemonTag type="danger">Limit reached</LemonTag> : `${usedPct}%`}
-            fill
-        >
-            <LemonProgress percent={usedPct} strokeColor={limitReached ? 'var(--danger)' : undefined} />
-            <div className="text-sm tabular-nums">
-                {formatCreditsRange(used, limit)} (≈ {creditsToUsd(limit)} per period)
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div className="min-w-0">
+                <OverviewPanel
+                    title="Spend against limit"
+                    subtitle={limitReached ? <LemonTag type="danger">Limit reached</LemonTag> : `${usedPct}%`}
+                    fill
+                >
+                    <LemonProgress percent={usedPct} strokeColor={limitReached ? 'var(--danger)' : undefined} />
+                    <div className="text-sm tabular-nums">
+                        {formatCreditsRange(used, limit)} (≈ {creditsToUsd(limit)} per period)
+                    </div>
+                    {limitReached && (
+                        // The tag can appear below 100%: a scanner stops as soon as what's left can't cover a whole
+                        // scan, so the copy has to explain that rather than claim the budget is fully spent.
+                        <div className="text-xs text-muted">
+                            What's left won't cover another scan, so this scanner has stopped until its limit resets at
+                            the start of the next billing period. Sessions skipped while capped are not scanned later.
+                        </div>
+                    )}
+                </OverviewPanel>
             </div>
-            {limitReached && (
-                // The tag can appear below 100%: a scanner stops as soon as what's left can't cover a whole
-                // scan, so the copy has to explain that rather than claim the budget is fully spent.
-                <div className="text-xs text-muted">
-                    What's left won't cover another scan, so this scanner has stopped until its limit resets at the
-                    start of the next billing period. Sessions skipped while capped are not scanned later.
-                </div>
-            )}
-        </OverviewPanel>
+        </div>
     )
 }
 
@@ -429,7 +433,6 @@ function SummarizerOverview({ scannerId }: { scannerId: string }): JSX.Element |
 
 export function ScannerOverview({ scannerId }: { scannerId: string }): JSX.Element | null {
     const { scanner } = useValues(replayScannerLogic({ id: scannerId }))
-    const { creditLimitStats } = useValues(scannerOverviewLogic({ scannerId }))
     if (!scanner) {
         return null
     }
@@ -484,13 +487,7 @@ export function ScannerOverview({ scannerId }: { scannerId: string }): JSX.Eleme
         <div className="flex flex-col gap-4">
             <ScannerOverviewFilters scannerId={scannerId} />
             {body}
-            {creditLimitStats && (
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                    <div className="min-w-0">
-                        <CreditLimitOverview scannerId={scannerId} />
-                    </div>
-                </div>
-            )}
+            <CreditLimitOverview scannerId={scannerId} />
         </div>
     )
 }

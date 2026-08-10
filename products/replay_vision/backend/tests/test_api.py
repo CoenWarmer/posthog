@@ -2330,9 +2330,8 @@ class TestRetryActions(_VisionAPITestCase):
     def test_retry_keeps_row_when_the_scanners_own_limit_is_reached(
         self, mock_sync_connect: MagicMock, mock_async_to_sync: MagicMock
     ) -> None:
-        # Retry deletes the failed row before dispatching, and create_observation_activity refuses the
-        # replacement on the same budget. Without this gate the row is gone and nothing replaces it,
-        # while the caller is told the retry started.
+        # Retry deletes the failed row before dispatching; without this gate the refused replacement
+        # leaves the row gone while the caller is told the retry started.
         start_workflow = MagicMock()
         mock_async_to_sync.return_value = start_workflow
         observation = self._create_failed("sess-scanner-limit")
