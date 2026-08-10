@@ -5,7 +5,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("replay_vision", "0061_validate_replay_scanner_credit_limit_positive"),
+        ("replay_vision", "0068_validate_replay_scanner_credit_limit_positive"),
     ]
 
     operations = [
