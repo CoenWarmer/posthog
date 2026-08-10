@@ -32,7 +32,7 @@ import { useChannelTaskMutations } from "@posthog/ui/features/canvas/hooks/useCh
 import { useFolderInstructions } from "@posthog/ui/features/canvas/hooks/useFolderInstructions";
 import { useReportSpace } from "@posthog/ui/features/canvas/hooks/useReportSpace";
 import { useTaskChannels } from "@posthog/ui/features/canvas/hooks/useTaskChannels";
-import { ReportSessions } from "@posthog/ui/features/canvas/reports/ReportSessions";
+import { ReportSessions } from "@posthog/ui/features/canvas/reports/ReportSessionsList";
 import { useThreadPanelStore } from "@posthog/ui/features/canvas/stores/threadPanelStore";
 import { SuggestedPromptCard } from "@posthog/ui/features/task-detail/components/SuggestedPromptCard";
 import { taskDetailQuery } from "@posthog/ui/features/tasks/queries";
