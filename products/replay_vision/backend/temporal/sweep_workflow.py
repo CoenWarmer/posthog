@@ -73,9 +73,9 @@ class SweepScannerWorkflow(PostHogWorkflow):
 
     @wf.run
     async def run(self, inputs: SweepScannerInputs) -> None:
-        # The sweep is also the heartbeat for this scanner's "and then…" vision actions. Best-effort:
-        # a vision-action problem must never block the scanner's core session scan, and it's
-        # independent of the in-flight throttle below (which is about apply-scanner load).
+        # The sweep is also the heartbeat for this scanner's "and then…" vision actions. Run it first
+        # and best-effort: a vision-action problem must never block the scanner's core session scan,
+        # and it's independent of the in-flight throttle below (which is about apply-scanner load).
         await self._dispatch_due_vision_actions(inputs)
 
         # Same heartbeat keeps the prompt recommendation fresh. The activity self-gates to at most one
@@ -95,10 +95,9 @@ class SweepScannerWorkflow(PostHogWorkflow):
                     "replay_vision.prompt_suggestion_refresh_failed", extra={"scanner_id": str(inputs.scanner_id)}
                 )
 
-        # A capped scanner scans no sessions this tick, but the heartbeats above still ran: vision
-        # actions and the prompt recommendation spend no scanner credits, so a cap must not starve
-        # them. Fails open (admissions stay gated at the persistence boundary), and patched so sweeps
-        # already in flight replay unchanged across the deploy.
+        # A capped scanner scans no sessions this tick; the heartbeats above spend no scanner
+        # credits, so they ran first. Fails open (admissions stay gated at the persistence
+        # boundary); patched so in-flight sweeps replay unchanged across the deploy.
         if wf.patched("replay-vision-scanner-credit-limit"):
             try:
                 budget = await wf.execute_activity(

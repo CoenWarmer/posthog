@@ -387,8 +387,8 @@ class ReplayScannerPromptSuggestionViewSet(
             "Results land on the suggestion's `evaluation` field. Poll `current` while status is running. "
             "`session_limit` controls how many rated sessions are re-run (thumbs-down prioritized, up to "
             "`evaluation_session_cap`). Each successful re-run charges credits like a normal observation of "
-            "the same model. The request is refused with 402 when the planned credits exceed what is left of "
-            "what is left for the current billing period, either the org's limit or this scanner's own. Monitor and classifier scanners get a "
+            "the same model. The request is refused with 402 when the planned credits exceed what is left "
+            "for the current billing period, either the org's limit or this scanner's own. Monitor and classifier scanners get a "
             "kept/fixed/regressed classification, while scorer and summarizer scanners show the raw before "
             "and after output. Requires session recording edit access."
         ),
@@ -417,9 +417,8 @@ class ReplayScannerPromptSuggestionViewSet(
         # both see "not in flight", and the second stub save moves `started_at`, which re-keys the usage
         # receipts of the first run's still-settling sessions and charges them twice.
         with transaction.atomic():
-            # A capped scanner's budget reads must serialize with the admission gate's row lock, or a
-            # test racing sweep admissions can jointly overshoot the cap. Scanner before suggestion,
-            # matching apply's lock order.
+            # Serialize capped budget reads with the admission gate's row lock; scanner before
+            # suggestion, matching apply's lock order.
             if scanner.credit_limit is not None:
                 ReplayScanner.objects.select_for_update().filter(team_id=self.team_id, pk=scanner.id).only("pk").first()
             suggestion = ReplayScannerPromptSuggestion.objects.select_for_update().get(
