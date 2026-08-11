@@ -93,7 +93,7 @@ class TestCustomerEmailIngestion(BaseTest):
             "X-Mailgun-Spf": "pass",
         }
         data.update(overrides)
-        return self.client.post("/api/conversations/v1/email/outbound", data)
+        return self.client.post("/api/conversations/v1/email/capture", data)
 
     def test_forwarding_verification_is_visible_only_to_channel_owner_without_support_side_effects(self) -> None:
         colleague = User.objects.create(email="colleague@example.com", current_team=self.team)
