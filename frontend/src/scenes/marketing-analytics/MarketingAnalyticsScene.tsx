@@ -41,6 +41,7 @@ import {
 import { NewMarketingAnalyticsDashboard } from './NewMarketingAnalyticsDashboard'
 import { marketingOnboardingLogic } from './Onboarding/marketingOnboardingLogic'
 import { Onboarding } from './Onboarding/Onboarding'
+import { SetupTab } from './Setup/SetupTab'
 
 export const scene: SceneExport = {
     component: MarketingAnalyticsScene,
@@ -221,8 +222,16 @@ const MarketingAnalyticsContent = (): JSX.Element => {
         </>
     )
 
+    // Setup absorbs Integration health: while its flag is on, the audit lives inside
+    // Setup as a section rather than as a second top-level tab, so there's one door to
+    // "something is wrong with my setup" instead of two.
+    const setupEnabled = !!featureFlags[FEATURE_FLAGS.MARKETING_ANALYTICS_SETUP]
+
     const tabs = [
         { key: MarketingAnalyticsTab.DASHBOARD, label: 'Dashboard', content: dashboard },
+        // Untouched by Setup: the explorer compares attribution models against each
+        // other, which is analysis. Setup's Attribution section is the two config
+        // fields (mode and lookback), which is a different thing with the same name.
         ...(featureFlags[FEATURE_FLAGS.MARKETING_ANALYTICS_ATTRIBUTION]
             ? [
                   {
@@ -232,15 +241,17 @@ const MarketingAnalyticsContent = (): JSX.Element => {
                   },
               ]
             : []),
-        ...(featureFlags[FEATURE_FLAGS.MARKETING_ANALYTICS_UTM_AUDIT]
-            ? [
-                  {
-                      key: MarketingAnalyticsTab.INTEGRATION_HEALTH,
-                      label: 'Integration health',
-                      content: <UtmAuditTab />,
-                  },
-              ]
-            : []),
+        ...(setupEnabled
+            ? [{ key: MarketingAnalyticsTab.SETUP, label: 'Setup', content: <SetupTab /> }]
+            : featureFlags[FEATURE_FLAGS.MARKETING_ANALYTICS_UTM_AUDIT]
+              ? [
+                    {
+                        key: MarketingAnalyticsTab.SETUP,
+                        label: 'Integration health',
+                        content: <UtmAuditTab />,
+                    },
+                ]
+              : []),
     ]
 
     // Only surface the tab bar once a secondary tab is enabled; otherwise show the dashboard directly.
@@ -258,8 +269,8 @@ const TAB_DESCRIPTIONS: Record<string, string> = {
         'Analyze your marketing performance across integrations: spend, impressions, conversions, ROAS, and more metrics.',
     [MarketingAnalyticsTab.ATTRIBUTION]:
         'Compare how each attribution model credits your conversions, to see which marketing you might be over or under valuing.',
-    [MarketingAnalyticsTab.INTEGRATION_HEALTH]:
-        'Check that your ad platform campaigns are properly linked to UTM tracking in PostHog.',
+    [MarketingAnalyticsTab.SETUP]:
+        'Everything Marketing analytics needs to work: connected ad platforms, conversion goals, UTM mapping and attribution.',
 }
 
 const MarketingAnalyticsAIToolWrapper = ({ children }: { children: React.ReactNode }): JSX.Element => {
