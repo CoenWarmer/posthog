@@ -4,7 +4,6 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("warehouse_sources", "0124_rename_planetscale_source_type_to_mysql"),
     ]
