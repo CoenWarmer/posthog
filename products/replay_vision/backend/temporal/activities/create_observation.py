@@ -136,7 +136,9 @@ def _create_observation(inputs: CreateObservationInputs) -> CreateObservationOut
                 )
                 if locked is not None and locked.credit_limit is not None:
                     scanner_budget = compute_scanner_budget(scanner)
-                    if scanner_budget.blocked:
+                    # Priced from `priced_model` (the frozen snapshot model for backfills), matching
+                    # what the observation will actually charge, not the scanner's current model.
+                    if scanner_budget.would_exceed(observation_credits_for_model(priced_model)):
                         # A retry's own first insert counts as in-flight spend, so reclaim it
                         # (as the UniqueViolation path does) instead of stranding it PENDING.
                         if (existing_output := _existing_row_output(inputs)) is not None:
