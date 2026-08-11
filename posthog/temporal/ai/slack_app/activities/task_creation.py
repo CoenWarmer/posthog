@@ -16,7 +16,7 @@ from posthog.temporal.ai.slack_app.attachments import (
     prepare_slack_file_artifacts,
 )
 from posthog.temporal.ai.slack_app.helpers import block_if_team_over_quota, safe_react
-from posthog.temporal.ai.slack_app.types import PostHogCodeSlackMentionWorkflowInputs
+from posthog.temporal.ai.slack_app.types import PostHogCodeSlackMentionWorkflowInputs, SlackAppModelOverride
 from posthog.temporal.common.utils import close_db_connections
 
 logger = structlog.get_logger(__name__)
@@ -52,7 +52,7 @@ _SLACK_DELIVERY_CONSTRAINTS = (
 )
 
 # Variant used when the slack-app-canvas-file-artifacts flag is on but the Slack install
-# is missing the in-review canvases:write / files:write scopes: charts still work (they
+# is missing the canvases:write / files:write scopes: charts still work (they
 # post by url on chat:write alone), canvases and file uploads do not.
 _SLACK_DELIVERY_CONSTRAINTS_MESSAGE_AND_CHARTS = (
     """Slack delivery constraints:
@@ -555,6 +555,7 @@ def create_posthog_code_task_for_repo_activity(
     repository: str | None,
     repo_research_task_id: str | None = None,
     repo_research_run_id: str | None = None,
+    model_override: SlackAppModelOverride | None = None,
 ) -> None:
     from posthog.models.integration import Integration, SlackIntegration
 
@@ -674,9 +675,9 @@ def create_posthog_code_task_for_repo_activity(
     # PR tooling enabled so an explicit follow-up can clone a repo and publish.
     allow_pr_creation = True
 
-    from products.slack_app.backend.facade.slack_settings import resolve_ai_preferences
+    from products.slack_app.backend.facade.run_preferences import resolve_run_preferences
 
-    ai_prefs = resolve_ai_preferences(integration, slack_user_id)
+    run_prefs = resolve_run_preferences(integration, slack_user_id, override=model_override)
 
     # File into the creator's personal "#me" channel so the task surfaces in PostHog Desktop's
     # Spaces feed, which is strictly channel-scoped — a NULL-channel task shows up in no space.
@@ -706,9 +707,9 @@ def create_posthog_code_task_for_repo_activity(
             start_workflow=False,
             posthog_mcp_scopes="full",
             initial_permission_mode="bypassPermissions",
-            runtime_adapter=ai_prefs.runtime_adapter,
-            model=ai_prefs.model,
-            reasoning_effort=ai_prefs.reasoning_effort,
+            runtime_adapter=run_prefs.runtime_adapter,
+            model=run_prefs.model,
+            reasoning_effort=run_prefs.reasoning_effort,
             channel_id=personal_channel_id,
         )
     except Exception as e:
