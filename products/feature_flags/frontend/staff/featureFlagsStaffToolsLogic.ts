@@ -47,8 +47,17 @@ const SEARCH_DEBOUNCE_MS = 300
 const WARM_RUN_ACTIVE_POLL_MS = 5000
 const WARM_RUN_IDLE_POLL_MS = 30000
 
-const addPendingTeamId = (state: number[], { teamId }: { teamId: number }): number[] =>
+const appendTeamId = (state: number[], { teamId }: { teamId: number }): number[] =>
     state.includes(teamId) ? state : [...state, teamId]
+
+// LemonInput type="number" reports an emptied field as NaN via valueAsNumber, while a field the
+// operator never touched still holds the '' it was seeded with. Both mean "no override", so
+// neither check can be dropped: without the NaN branch, clearing a populated field fails
+// validation; without the '' branch, an untouched empty field submits Number('') === 0.
+export const parseFlagLimit = (value: unknown): number | null => {
+    const limit = Number(value)
+    return value === '' || Number.isNaN(limit) ? null : limit
+}
 
 export type StaffTeamResult = StaffTeamResultApi
 export type StaffCacheTeamStatus = StaffCacheTeamStatusApi
@@ -403,7 +412,7 @@ export const featureFlagsStaffToolsLogic = kea<featureFlagsStaffToolsLogicType>(
             [] as number[],
             {
                 setSelectedTeamIds: (_, { teamIds }) => teamIds,
-                seedTeamFromDeepLink: (state, { teamId }) => (state.includes(teamId) ? state : [...state, teamId]),
+                seedTeamFromDeepLink: appendTeamId,
             },
         ],
         // Accumulate team display info (name/org/token) from every search so the
@@ -453,8 +462,8 @@ export const featureFlagsStaffToolsLogic = kea<featureFlagsStaffToolsLogicType>(
         pendingTeamConfigTeamIds: [
             [] as number[],
             {
-                setMinimalFlagCalledEvents: addPendingTeamId,
-                setMaxFeatureFlagsOverride: addPendingTeamId,
+                setMinimalFlagCalledEvents: appendTeamId,
+                setMaxFeatureFlagsOverride: appendTeamId,
                 teamConfigMutationSettled: (state, { teamId }) => state.filter((id) => id !== teamId),
             },
         ],
@@ -491,12 +500,9 @@ export const featureFlagsStaffToolsLogic = kea<featureFlagsStaffToolsLogicType>(
             actions.loadCacheStatus()
         }
 
-        // Shared by every team-config mutation so at most one is in flight per team. The response
-        // carries the whole row, so a concurrent pair would overwrite each other's field. The
-        // `Set` is non-reactive on purpose: it guards against a duplicate submit that races ahead
-        // of the reducer-driven `pendingTeamConfigTeamIds` re-render. Each caller sends only the
-        // setting it owns, because sending a stale value for the other one would silently revert
-        // a concurrent staff change.
+        // One mutation in flight per team: each response carries the whole row, so a concurrent
+        // pair would overwrite each other's field. The `Set` is non-reactive on purpose, guarding
+        // a duplicate submit that races ahead of `pendingTeamConfigTeamIds`' re-render.
         const mutateTeamConfig = async (
             teamId: number,
             body: Omit<StaffTeamConfigMutationApi, 'team_id'>,

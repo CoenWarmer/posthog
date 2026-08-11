@@ -22,6 +22,7 @@ import { featureFlagsStaffTeamConfigSetCreateBodyMaxFeatureFlagsOverrideMax } fr
 import {
     CACHE_LABELS,
     featureFlagsStaffToolsLogic,
+    parseFlagLimit,
     StaffCacheEntryStatus,
     StaffCacheKind,
     StaffReadableCacheKind,
@@ -153,23 +154,14 @@ function CacheStatusCell({ status, onView }: { status?: StaffCacheEntryStatus; o
     )
 }
 
-// LemonInput type="number" reports its value as `valueAsNumber`, which is NaN for an empty
-// field rather than ''. Both mean "no override", so clearing the field has to be read through
-// this rather than an equality check against '', or emptying the field to drop an override is
-// rejected as invalid.
-function parseFlagLimit(value: unknown): number | null {
-    const limit = Number(value)
-    return value === '' || Number.isNaN(limit) ? null : limit
-}
-
 function openFlagLimitDialog(
     team: StaffTeamResult,
     config: StaffTeamConfig,
-    setMaxFeatureFlagsOverride: (teamId: number, maxFeatureFlagsOverride: number | null) => void
+    setMaxFeatureFlagsOverride: (teamId: number, maxFeatureFlagsOverride: number | null) => Promise<void>
 ): void {
     LemonDialog.openForm({
         title: `Flag limit for ${team.name}`,
-        description: `This team has ${config.feature_flag_count.toLocaleString()} flags, with a limit of ${config.effective_max_feature_flags.toLocaleString()}. Leave the field empty to use the default limit.`,
+        description: `This team has ${config.feature_flag_count.toLocaleString()} flags, with a limit of ${config.effective_max_feature_flags.toLocaleString()}. Leave the field empty to use the default limit. A limit at or below the current count blocks all new flags for this team, including the ones surveys and experiments create.`,
         initialValues: { maxFeatureFlags: config.max_feature_flags_override ?? '' },
         shouldAwaitSubmit: true,
         content: (
@@ -186,9 +178,10 @@ function openFlagLimitDialog(
                 return `Enter a whole number between 1 and ${MAX_FLAG_LIMIT.toLocaleString()}, or leave the field empty to use the default.`
             },
         },
-        onSubmit: ({ maxFeatureFlags }) => {
+        onSubmit: async ({ maxFeatureFlags }) => {
             // Null clears the override, which the backend reads as "fall back to the global default".
-            setMaxFeatureFlagsOverride(team.id, parseFlagLimit(maxFeatureFlags))
+            // Awaited so the dialog keeps its submit button in a loading state until the write lands.
+            await setMaxFeatureFlagsOverride(team.id, parseFlagLimit(maxFeatureFlags))
         },
     })
 }
@@ -204,14 +197,10 @@ export function StaffCacheToolsTab(): JSX.Element {
         teamConfigByTeamId,
         pendingTeamConfigTeamIds,
     } = useValues(featureFlagsStaffToolsLogic)
-    const {
-        rebuildCache,
-        clearCache,
-        loadCacheStatus,
-        viewCacheEntry,
-        setMinimalFlagCalledEvents,
-        setMaxFeatureFlagsOverride,
-    } = useActions(featureFlagsStaffToolsLogic)
+    const { rebuildCache, clearCache, loadCacheStatus, viewCacheEntry, setMinimalFlagCalledEvents } =
+        useActions(featureFlagsStaffToolsLogic)
+    // Async so the dialog can await the write and keep its submit button loading meanwhile.
+    const { setMaxFeatureFlagsOverride } = useAsyncActions(featureFlagsStaffToolsLogic)
 
     const hasSelection = selectedTeamIds.length > 0
     const mutating = rebuildResultLoading || clearResultLoading

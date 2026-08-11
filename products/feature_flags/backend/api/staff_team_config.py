@@ -154,13 +154,19 @@ class FeatureFlagsStaffTeamConfigViewSet(viewsets.ViewSet):
         # Dedupe (preserving order) so a caller passing the same id twice doesn't get duplicate
         # rows in `results`, matching staff_cache.py's handling of team_ids.
         team_ids: list[int] = list(dict.fromkeys(request.validated_query_data["team_ids"]))
-        existing_team_ids = set(Team.objects.filter(id__in=team_ids).values_list("id", flat=True))
+        # Each team maps to its project root. Flags are project-scoped (RootTeamMixin.save stores
+        # them under the root), and the team_id__in below skips the root rewrite that a team_id=
+        # filter would get, so counting the raw ids would report 0 for an environment team.
+        root_team_id_by_team_id = {
+            team_id: parent_team_id or team_id
+            for team_id, parent_team_id in Team.objects.filter(id__in=team_ids).values_list("id", "parent_team_id")
+        }
         config_by_team_id = TeamFeatureFlagsConfig.objects.in_bulk(team_ids)
-        # FeatureFlag.objects excludes soft-deleted rows, so this count matches the one
-        # check_flag_limits_for_team compares against the limit. Staff reading this number next to
-        # the limit have to see the number the validator sees.
-        flag_count_by_team_id = dict(
-            FeatureFlag.objects.filter(team_id__in=team_ids)
+        # FeatureFlag.objects excludes soft-deleted rows, so counting the root team gives the
+        # number check_flag_limits_for_team compares against the limit. Staff reading this number
+        # next to the limit have to see the number the validator sees.
+        flag_count_by_root_team_id = dict(
+            FeatureFlag.objects.filter(team_id__in=set(root_team_id_by_team_id.values()))
             .values("team_id")
             .annotate(count=Count("id"))
             .values_list("team_id", "count")
@@ -168,7 +174,7 @@ class FeatureFlagsStaffTeamConfigViewSet(viewsets.ViewSet):
 
         results = []
         for team_id in team_ids:
-            if team_id not in existing_team_ids:
+            if team_id not in root_team_id_by_team_id:
                 continue
             # An unsaved instance stands in for a legacy team whose row predates this extension,
             # so the model's own field defaults answer for it rather than a second copy here.
@@ -178,7 +184,7 @@ class FeatureFlagsStaffTeamConfigViewSet(viewsets.ViewSet):
                     team_id=team_id,
                     minimal_flag_called_events=config.minimal_flag_called_events,
                     max_feature_flags_override=config.max_feature_flags_override,
-                    feature_flag_count=flag_count_by_team_id.get(team_id, 0),
+                    feature_flag_count=flag_count_by_root_team_id.get(root_team_id_by_team_id[team_id], 0),
                 )
             )
         return response.Response({"results": results})
@@ -195,6 +201,16 @@ class FeatureFlagsStaffTeamConfigViewSet(viewsets.ViewSet):
         team = Team.objects.filter(id=team_id).first()
         if team is None:
             raise NotFound(f"Team {team_id} not found.")
+
+        # The limit is enforced against the project's whole flag set, and get_max_feature_flags_for_team
+        # reads the override off the project root, so a row written here would never be read.
+        # minimal_flag_called_events stays per-team (the Rust and nodejs readers key on the literal
+        # team), which is why only the override is refused rather than the whole request.
+        if "max_feature_flags_override" in validated and team.parent_team_id is not None:
+            raise serializers.ValidationError(
+                f"Team {team_id} is an environment of project {team.parent_team_id}. Set the flag limit on "
+                f"team {team.parent_team_id}: it is enforced against the whole project's flags."
+            )
 
         config = get_or_create_team_extension(team, TeamFeatureFlagsConfig)
         old_minimal_flag_called_events = config.minimal_flag_called_events
@@ -227,16 +243,25 @@ class FeatureFlagsStaffTeamConfigViewSet(viewsets.ViewSet):
             update_team_metadata_cache_task.delay(team.id)
             update_team_flags_cache.delay(team.id)
 
+        # Only the settings the request actually touched are logged, so an override-only write
+        # doesn't assert an unchanged value for the other one. old_value/new_value stay bound to
+        # minimal_flag_called_events under those names because dashboards outside this repo were
+        # built on them before the endpoint took a second setting.
+        changed_values: dict[str, Any] = {}
+        if "minimal_flag_called_events" in validated:
+            changed_values["old_value"] = old_minimal_flag_called_events
+            changed_values["new_value"] = config.minimal_flag_called_events
+        if "max_feature_flags_override" in validated:
+            changed_values["old_max_feature_flags_override"] = old_max_feature_flags_override
+            changed_values["new_max_feature_flags_override"] = config.max_feature_flags_override
+
         logger.info(
             "flags_staff_team_config_updated",
             staff_user_id=request.user.id,
             was_impersonated=is_impersonated(request),
             team_id=team.id,
             updated_fields=update_fields,
-            old_value=old_minimal_flag_called_events,
-            new_value=config.minimal_flag_called_events,
-            old_max_feature_flags_override=old_max_feature_flags_override,
-            new_max_feature_flags_override=config.max_feature_flags_override,
+            **changed_values,
         )
 
         return response.Response(

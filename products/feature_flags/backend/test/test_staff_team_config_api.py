@@ -198,6 +198,11 @@ class TestFeatureFlagsStaffTeamConfigAPI(APIBaseTest):
             response = self.client.post(SET_URL, {"team_id": self.team.id, **body}, format="json")
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
+        # The staff table renders this response directly, so returning the pre-save value (the
+        # `old_*` local sits in the same scope with a near-identical name) would show a stale
+        # limit until reload.
+        self.assertEqual(response.json()["max_feature_flags_override"], expected_override)
+        self.assertEqual(response.json()["effective_max_feature_flags"], expected_override)
         config.refresh_from_db()
         self.assertEqual(config.max_feature_flags_override, expected_override)
         self.assertEqual(config.minimal_flag_called_events, expected_minimal_flag_called_events)
@@ -240,6 +245,43 @@ class TestFeatureFlagsStaffTeamConfigAPI(APIBaseTest):
         mock_metadata_task.delay.assert_not_called()
         mock_flags_task.delay.assert_not_called()
 
+    def test_set_rejects_a_form_encoded_body(self):
+        # parser_classes = [JSONParser] is the only thing stopping DRF's default_empty_html from
+        # reading an absent minimal_flag_called_events as False on a limit-only write. Every other
+        # test here posts JSON, so deleting that line would leave them all green while a real
+        # form-encoded request silently switched the setting off.
+        config = get_or_create_team_extension(self.team, TeamFeatureFlagsConfig)
+        config.minimal_flag_called_events = True
+        config.save(update_fields=["minimal_flag_called_events"])
+
+        response = self.client.post(
+            SET_URL, {"team_id": self.team.id, "max_feature_flags_override": 5000}, format="multipart"
+        )
+
+        # The form body never reaches validated_data at all, which is why team_id reads as missing
+        # rather than the request succeeding. Asserting the surviving setting rather than the exact
+        # status keeps this pinned to the harm if DRF changes how it signals the rejection.
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(response.json()["attr"], "team_id")
+        config.refresh_from_db()
+        self.assertTrue(config.minimal_flag_called_events)
+
+    def test_set_refuses_an_override_on_an_environment_team(self):
+        # Flags are project-scoped, so get_max_feature_flags_for_team reads the override off the
+        # project root. A row written on an environment team would never be read, leaving staff
+        # believing they had granted capacity that was silently inert.
+        environment = Team.objects.create(
+            organization=self.organization, project=self.project, parent_team=self.team, name="Environment"
+        )
+
+        response = self.client.post(
+            SET_URL, {"team_id": environment.id, "max_feature_flags_override": 5000}, format="json"
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn(str(self.team.id), str(response.json()))
+        self.assertIsNone(TeamFeatureFlagsConfig.objects.get(team=environment).max_feature_flags_override)
+
 
 class TestStaffTeamConfigMutationSerializerBounds(SimpleTestCase):
     # Field-level validation only, no DB, because validating a body never reaches the object-level
@@ -248,15 +290,26 @@ class TestStaffTeamConfigMutationSerializerBounds(SimpleTestCase):
     # DB-backed test above, since those all send a body with at least one valid setting.
     @parameterized.expand(
         [
-            ("zero_rejected", {"team_id": 1, "max_feature_flags_override": 0}),
-            ("negative_rejected", {"team_id": 1, "max_feature_flags_override": -1}),
+            ("zero_rejected", {"team_id": 1, "max_feature_flags_override": 0}, "max_feature_flags_override"),
             (
                 "above_ceiling_rejected",
                 {"team_id": 1, "max_feature_flags_override": MAX_FEATURE_FLAGS_OVERRIDE_CEILING + 1},
+                "max_feature_flags_override",
             ),
-            ("neither_setting_present_rejected", {"team_id": 1}),
+            ("neither_setting_present_rejected", {"team_id": 1}, "non_field_errors"),
         ]
     )
-    def test_rejects_invalid_bodies(self, _name, data):
+    def test_rejects_invalid_bodies(self, _name, data, expected_error_key):
         serializer = StaffTeamConfigMutationSerializer(data=data)
         self.assertFalse(serializer.is_valid())
+        # Asserting the key, not just that validation failed: a bare assertFalse would stay green
+        # if the bounds disappeared and some unrelated required field started rejecting these.
+        self.assertIn(expected_error_key, serializer.errors)
+
+    def test_accepts_the_ceiling_itself(self):
+        # Pins the ceiling as inclusive. Narrowing max_value by one would keep every rejection
+        # case above green while refusing the largest grant the constant advertises.
+        serializer = StaffTeamConfigMutationSerializer(
+            data={"team_id": 1, "max_feature_flags_override": MAX_FEATURE_FLAGS_OVERRIDE_CEILING}
+        )
+        self.assertTrue(serializer.is_valid())

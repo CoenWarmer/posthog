@@ -6,7 +6,7 @@ import { lemonToast } from 'lib/lemon-ui/LemonToast/LemonToast'
 import { useMocks } from '~/mocks/jest'
 import { initKeaTests } from '~/test/init'
 
-import { featureFlagsStaffToolsLogic, StaffTeamResult } from './featureFlagsStaffToolsLogic'
+import { featureFlagsStaffToolsLogic, parseFlagLimit, StaffTeamResult } from './featureFlagsStaffToolsLogic'
 
 jest.mock('lib/lemon-ui/LemonToast/LemonToast', () => ({
     lemonToast: { success: jest.fn(), warning: jest.fn(), error: jest.fn() },
@@ -394,7 +394,11 @@ describe('featureFlagsStaffToolsLogic', () => {
             })
 
             logic.actions.setMaxFeatureFlagsOverride(5, override)
+            // Drives the pencil button's loading state and disabledReason while the write is in
+            // flight; without it staff get no feedback on a click that issues a request.
+            expect(logic.values.pendingTeamConfigTeamIds).toEqual([5])
             await expectLogic(logic).toDispatchActions(['teamConfigMutationSucceeded', 'teamConfigMutationSettled'])
+            expect(logic.values.pendingTeamConfigTeamIds).toEqual([])
 
             // Sending a stale minimal_flag_called_events alongside the limit would silently
             // revert a concurrent staff change to that setting, which is why the backend takes
@@ -415,6 +419,22 @@ describe('featureFlagsStaffToolsLogic', () => {
             }).toFinishAllListeners()
 
             expect(handleSet).toHaveBeenCalledTimes(1)
+        })
+    })
+
+    describe('parseFlagLimit', () => {
+        // Both "empty" branches are load-bearing and neither is reachable from the other's test.
+        // LemonInput type="number" reports a cleared field as NaN via valueAsNumber, while a field
+        // the operator never touched still holds the '' the dialog seeded. Drop the NaN branch and
+        // clearing an override fails validation; drop the '' branch and an untouched field submits
+        // Number('') === 0, which the serializer's min_value rejects.
+        it.each([
+            ['', null],
+            [NaN, null],
+            [500, 500],
+            [1, 1],
+        ])('parseFlagLimit(%p) is %p', (value, expected) => {
+            expect(parseFlagLimit(value)).toEqual(expected)
         })
     })
 })
