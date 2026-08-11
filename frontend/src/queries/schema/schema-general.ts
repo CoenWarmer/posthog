@@ -8894,6 +8894,9 @@ export const externalDataSources = [
     'Sevalla',
     'Motion',
     'Framer',
+    'Depot',
+    'Schematic',
+    'Dokploy',
 ] as const
 
 export type ExternalDataSourceType = (typeof externalDataSources)[number]
