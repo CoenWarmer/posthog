@@ -381,5 +381,40 @@ describe('featureFlagsStaffToolsLogic', () => {
 
             expect(handleSet).toHaveBeenCalledTimes(1)
         })
+
+        it.each([500, null])('setMaxFeatureFlagsOverride(%p) sends only its own field', async (override) => {
+            let lastBody: Record<string, any> | undefined
+            useMocks({
+                post: {
+                    [SET_URL]: async ({ request }: { request: Request }) => {
+                        lastBody = await request.json()
+                        return [200, { team_id: 5, max_feature_flags_override: override }]
+                    },
+                },
+            })
+
+            logic.actions.setMaxFeatureFlagsOverride(5, override)
+            await expectLogic(logic).toDispatchActions(['teamConfigMutationSucceeded', 'teamConfigMutationSettled'])
+
+            // Sending a stale minimal_flag_called_events alongside the limit would silently
+            // revert a concurrent staff change to that setting, which is why the backend takes
+            // partial updates and each mutation sends only the field it owns.
+            expect(lastBody).toEqual({ team_id: 5, max_feature_flags_override: override })
+        })
+
+        it('only allows one request in flight per team across both mutations', async () => {
+            const handleSet = jest.fn(() => [200, { team_id: 5, minimal_flag_called_events: true }])
+            useMocks({ post: { [SET_URL]: handleSet } })
+
+            // Two separate in-flight guards, one per mutation, would let a switch toggle and a
+            // limit save fly concurrently for one team. Each response carries the whole row, so
+            // whichever landed second would clobber the other's field.
+            await expectLogic(logic, () => {
+                logic.actions.setMinimalFlagCalledEvents(5, true)
+                logic.actions.setMaxFeatureFlagsOverride(5, 500)
+            }).toFinishAllListeners()
+
+            expect(handleSet).toHaveBeenCalledTimes(1)
+        })
     })
 })

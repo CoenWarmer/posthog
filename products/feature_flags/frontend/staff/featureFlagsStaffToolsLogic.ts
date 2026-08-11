@@ -22,6 +22,7 @@ import type {
     StaffCacheMutationResponseApi,
     StaffCacheTeamStatusApi,
     StaffTeamConfigApi,
+    StaffTeamConfigMutationApi,
     StaffTeamResultApi,
     StaffWarmRunApi,
     StaffWarmRunCancelResponseApi,
@@ -45,6 +46,9 @@ const SEARCH_DEBOUNCE_MS = 300
 // and slowly otherwise (a new run can only appear when an operator starts one).
 const WARM_RUN_ACTIVE_POLL_MS = 5000
 const WARM_RUN_IDLE_POLL_MS = 30000
+
+const addPendingTeamId = (state: number[], { teamId }: { teamId: number }): number[] =>
+    state.includes(teamId) ? state : [...state, teamId]
 
 export type StaffTeamResult = StaffTeamResultApi
 export type StaffCacheTeamStatus = StaffCacheTeamStatusApi
@@ -216,6 +220,13 @@ export interface featureFlagsStaffToolsLogicActions {
     seedTeamFromDeepLink: (teamId: number) => {
         teamId: number
     }
+    setMaxFeatureFlagsOverride: (
+        teamId: number,
+        maxFeatureFlagsOverride: number | null
+    ) => {
+        maxFeatureFlagsOverride: number | null
+        teamId: number
+    }
     setMinimalFlagCalledEvents: (
         teamId: number,
         minimalFlagCalledEvents: boolean
@@ -283,6 +294,10 @@ export const featureFlagsStaffToolsLogic = kea<featureFlagsStaffToolsLogicType>(
         setMinimalFlagCalledEvents: (teamId: number, minimalFlagCalledEvents: boolean) => ({
             teamId,
             minimalFlagCalledEvents,
+        }),
+        setMaxFeatureFlagsOverride: (teamId: number, maxFeatureFlagsOverride: number | null) => ({
+            teamId,
+            maxFeatureFlagsOverride,
         }),
         teamConfigMutationSucceeded: (teamConfig: StaffTeamConfig) => ({ teamConfig }),
         teamConfigMutationSettled: (teamId: number) => ({ teamId }),
@@ -421,19 +436,25 @@ export const featureFlagsStaffToolsLogic = kea<featureFlagsStaffToolsLogicType>(
         // Patches the matching row in place with a confirmed single-row mutation result, same as
         // scoutFleetLogic.ts's patchScoutConfigLocally: a loader-owned key can take extra action
         // handlers from a plain reducers() block alongside its auto-generated load handlers.
+        // Merged rather than replaced because the response shape is a runtime contract the
+        // TypeScript types can't verify: if set() ever stops returning one of the fields, merging
+        // keeps the value list() already fetched instead of blanking that column.
         teamConfig: [
             [] as StaffTeamConfig[],
             {
                 teamConfigMutationSucceeded: (state, { teamConfig }) =>
-                    state.map((config) => (config.team_id === teamConfig.team_id ? teamConfig : config)),
+                    state.map((config) =>
+                        config.team_id === teamConfig.team_id ? { ...config, ...teamConfig } : config
+                    ),
             },
         ],
-        // Reactive per-row in-flight flag for the switch's `loading`/`disabledReason` props.
+        // Reactive per-row in-flight flag for the row controls' `loading`/`disabledReason` props.
+        // Both mutations share it, so editing either setting disables the whole row.
         pendingTeamConfigTeamIds: [
             [] as number[],
             {
-                setMinimalFlagCalledEvents: (state, { teamId }) =>
-                    state.includes(teamId) ? state : [...state, teamId],
+                setMinimalFlagCalledEvents: addPendingTeamId,
+                setMaxFeatureFlagsOverride: addPendingTeamId,
                 teamConfigMutationSettled: (state, { teamId }) => state.filter((id) => id !== teamId),
             },
         ],
@@ -468,6 +489,34 @@ export const featureFlagsStaffToolsLogic = kea<featureFlagsStaffToolsLogicType>(
                 lemonToast.success(doneMessage)
             }
             actions.loadCacheStatus()
+        }
+
+        // Shared by every team-config mutation so at most one is in flight per team. The response
+        // carries the whole row, so a concurrent pair would overwrite each other's field. The
+        // `Set` is non-reactive on purpose: it guards against a duplicate submit that races ahead
+        // of the reducer-driven `pendingTeamConfigTeamIds` re-render. Each caller sends only the
+        // setting it owns, because sending a stale value for the other one would silently revert
+        // a concurrent staff change.
+        const mutateTeamConfig = async (
+            teamId: number,
+            body: Omit<StaffTeamConfigMutationApi, 'team_id'>,
+            settingLabel: string
+        ): Promise<void> => {
+            const inFlight: Set<number> = (cache.inFlightTeamConfigTeamIds ??= new Set())
+            if (inFlight.has(teamId)) {
+                return
+            }
+            inFlight.add(teamId)
+            try {
+                const teamConfig = await featureFlagsStaffTeamConfigSetCreate({ team_id: teamId, ...body })
+                actions.teamConfigMutationSucceeded(teamConfig)
+                lemonToast.success(`Updated team ${teamId}'s ${settingLabel}.`)
+            } catch {
+                lemonToast.error(`Failed to update team ${teamId}'s ${settingLabel}.`)
+            } finally {
+                inFlight.delete(teamId)
+                actions.teamConfigMutationSettled(teamId)
+            }
         }
 
         // Re-register the poller only when the desired cadence changes, so each
@@ -512,30 +561,14 @@ export const featureFlagsStaffToolsLogic = kea<featureFlagsStaffToolsLogicType>(
                 lemonToast.error('Failed to load cache entry.')
                 actions.closeCacheEntryModal()
             },
-            setMinimalFlagCalledEvents: async ({ teamId, minimalFlagCalledEvents }) => {
-                // Non-reactive guard against a duplicate submit racing ahead of the
-                // reducer-driven `pendingTeamConfigTeamIds` re-render. Named distinctly from that
-                // reducer (a `number[]` for UI loading state) since this is a `Set` used only to
-                // dedupe in-flight submits.
-                const inFlight: Set<number> = (cache.inFlightTeamConfigTeamIds ??= new Set())
-                if (inFlight.has(teamId)) {
-                    return
-                }
-                inFlight.add(teamId)
-                try {
-                    const teamConfig = await featureFlagsStaffTeamConfigSetCreate({
-                        team_id: teamId,
-                        minimal_flag_called_events: minimalFlagCalledEvents,
-                    })
-                    actions.teamConfigMutationSucceeded(teamConfig)
-                    lemonToast.success(`Updated team ${teamId}'s minimal flag_called events setting.`)
-                } catch {
-                    lemonToast.error(`Failed to update team ${teamId}'s minimal flag_called events setting.`)
-                } finally {
-                    inFlight.delete(teamId)
-                    actions.teamConfigMutationSettled(teamId)
-                }
-            },
+            setMinimalFlagCalledEvents: async ({ teamId, minimalFlagCalledEvents }) =>
+                await mutateTeamConfig(
+                    teamId,
+                    { minimal_flag_called_events: minimalFlagCalledEvents },
+                    'minimal flag_called events setting'
+                ),
+            setMaxFeatureFlagsOverride: async ({ teamId, maxFeatureFlagsOverride }) =>
+                await mutateTeamConfig(teamId, { max_feature_flags_override: maxFeatureFlagsOverride }, 'flag limit'),
             loadWarmRunSuccess: ({ warmRun }) => {
                 const desiredMs =
                     warmRun?.state === 'running' && !warmRun.is_stale ? WARM_RUN_ACTIVE_POLL_MS : WARM_RUN_IDLE_POLL_MS
