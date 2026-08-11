@@ -225,6 +225,49 @@ class TestSetupPlanCaching(APIBaseTest):
 
         assert build.call_count == 2
 
+    def test_applying_ops_invalidates_the_cache(self):
+        # Otherwise applying a change and reloading serves the pre-change plan, with the
+        # suggestion you just fixed still sitting there — which reads as a failed apply.
+        with patch(_PLAN_TARGET, return_value=_clean_plan()) as build:
+            self.client.get(self.url)
+
+            self.client.post(
+                f"/api/projects/{self.team.pk}/marketing_analytics/apply_setup_ops",
+                {
+                    "ops": [{"op": "add_custom_source_mapping", "integration": "MetaAds", "raw_utm_source": "fb-ads"}],
+                    "source": "setup_tab",
+                },
+                format="json",
+            )
+
+            self.client.get(self.url)
+
+        assert build.call_count == 2
+
+    def test_one_teams_invalidation_does_not_evict_another(self):
+        other = Team.objects.create(organization=self.organization, name="second")
+        other_url = f"/api/projects/{other.pk}/marketing_analytics/setup_plan"
+
+        with patch(_PLAN_TARGET, return_value=_clean_plan()) as build:
+            self.client.get(self.url)
+            self.client.get(other_url)
+            assert build.call_count == 2
+
+            self.client.post(
+                f"/api/projects/{self.team.pk}/marketing_analytics/apply_setup_ops",
+                {
+                    "ops": [{"op": "add_custom_source_mapping", "integration": "MetaAds", "raw_utm_source": "fb-ads"}],
+                    "source": "setup_tab",
+                },
+                format="json",
+            )
+
+            self.client.get(self.url)
+            self.client.get(other_url)
+
+        # Only this team rebuilt; the other team's entry was untouched.
+        assert build.call_count == 3
+
     def test_one_teams_plan_is_not_served_to_another(self):
         other = Team.objects.create(organization=self.organization, name="second")
 
