@@ -1,4 +1,4 @@
-"""Inbound email webhook endpoint for Mailgun routes."""
+"""Email webhook endpoints for Mailgun routes."""
 
 import re
 from datetime import UTC, datetime
@@ -20,7 +20,14 @@ from posthog.models.team import Team
 from posthog.models.user import User
 
 from products.conversations.backend.mailgun import validate_webhook_signature
-from products.conversations.backend.models import Channel, EmailChannel, EmailChannelKind, EmailMessageMapping, Status
+from products.conversations.backend.models import (
+    Channel,
+    EmailChannel,
+    EmailChannelKind,
+    EmailMessageMapping,
+    EmailThreadMessageDirection,
+    Status,
+)
 from products.conversations.backend.models.ticket import Ticket
 from products.conversations.backend.services.attachments import (
     sanitize_attachment_filename,
@@ -28,7 +35,7 @@ from products.conversations.backend.services.attachments import (
 )
 from products.conversations.backend.services.email_thread_ingestion import (
     EmailAddress,
-    ParsedInboundEmail,
+    ParsedEmail,
     ingest_customer_email,
 )
 from products.conversations.backend.services.region_routing import is_primary_region, proxy_to_secondary_region
@@ -36,6 +43,7 @@ from products.conversations.backend.services.region_routing import is_primary_re
 logger = structlog.get_logger(__name__)
 
 INBOUND_TOKEN_PATTERN = re.compile(r"^team-([a-f0-9]+)@")
+OUTBOUND_CAPTURE_LOCAL_PART = "sent"
 _VIA_SUFFIX_RE = re.compile(r"\s+via\s+.+$", re.IGNORECASE)
 _BASIC_EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 _MESSAGE_ID_RE = re.compile(r"<[^<>\s]+>")
@@ -254,6 +262,11 @@ def _sender_authenticated(request: HttpRequest, sender_email: str) -> bool:
     return bool(envelope_domain and from_domain and envelope_domain == from_domain)
 
 
+def _outbound_sender_authenticated(request: HttpRequest, sender_email: str) -> bool:
+    _, envelope_sender = parseaddr(request.POST.get("sender", ""))
+    return envelope_sender.strip().lower() == sender_email.lower() and _sender_authenticated(request, sender_email)
+
+
 def _parse_message_ids(value: str) -> tuple[str, ...]:
     message_ids = _MESSAGE_ID_RE.findall(value)
     if not message_ids:
@@ -293,19 +306,35 @@ def _parse_sent_at(request: HttpRequest) -> datetime:
     return timezone.now()
 
 
-def _parse_inbound_email(request: HttpRequest, config: EmailChannel) -> ParsedInboundEmail | None:
-    message_ids = _parse_message_ids(request.POST.get("Message-Id", ""))
-    if not message_ids:
-        return None
-
-    from_header = request.POST.get("from", "")
-    sender_name, sender_email = parseaddr(from_header)
+def _parse_sender(request: HttpRequest) -> EmailAddress:
+    sender_name, sender_email = parseaddr(request.POST.get("from", ""))
     if not sender_email:
         sender_email = request.POST.get("sender", "")
     sender_email = sender_email.strip().lower()[:400]
     if not sender_name:
         sender_name = sender_email.split("@")[0] if sender_email else "Unknown"
-    sender_email, sender_name = _recover_dmarc_rewritten_sender(request, config, sender_email, sender_name)
+    return EmailAddress(name=sender_name[:400], email=sender_email)
+
+
+def _parse_mailgun_email(
+    request: HttpRequest,
+    config: EmailChannel,
+    *,
+    recover_forwarded_sender: bool,
+) -> ParsedEmail | None:
+    message_ids = _parse_message_ids(request.POST.get("Message-Id", ""))
+    if not message_ids:
+        return None
+
+    sender = _parse_sender(request)
+    if recover_forwarded_sender:
+        sender_email, sender_name = _recover_dmarc_rewritten_sender(
+            request,
+            config,
+            sender.email,
+            sender.name,
+        )
+        sender = EmailAddress(name=sender_name[:400], email=sender_email)
 
     stripped_text = request.POST.get("stripped-text", "")
     stripped_signature = request.POST.get("stripped-signature", "")
@@ -326,18 +355,18 @@ def _parse_inbound_email(request: HttpRequest, config: EmailChannel) -> ParsedIn
             continue
         attachments.append(uploaded_file)
 
-    return ParsedInboundEmail(
+    return ParsedEmail(
         message_id=message_ids[0],
         in_reply_to=in_reply_to_ids[0] if in_reply_to_ids else None,
         references=_parse_message_ids(request.POST.get("References", "")),
         sent_at=_parse_sent_at(request),
-        sender=EmailAddress(name=sender_name[:400], email=sender_email),
+        sender=sender,
         to_recipients=_parse_addresses(request.POST.get("To", "")),
         cc_recipients=_parse_addresses(request.POST.get("Cc", "")),
         subject=request.POST.get("subject", "")[:500],
         body_plain=request.POST.get("body-plain", "")[:MAX_EMAIL_BODY_LENGTH],
         stripped_text=stripped_text[:MAX_EMAIL_BODY_LENGTH],
-        sender_authenticated=_sender_authenticated(request, sender_email),
+        sender_authenticated=_sender_authenticated(request, sender.email),
         capture_address=request.POST.get("recipient", "").strip().lower(),
         attachments=tuple(attachments),
     )
@@ -390,7 +419,7 @@ def _process_support_email(
     *,
     config: EmailChannel,
     inbound_token: str,
-    email: ParsedInboundEmail,
+    email: ParsedEmail,
 ) -> HttpResponse:
     team = config.team
     settings_dict = team.conversations_settings or {}
@@ -520,6 +549,97 @@ def _process_support_email(
     return HttpResponse(status=200)
 
 
+def _is_outbound_capture_recipient(recipient: str) -> bool:
+    local_part, separator, domain = recipient.strip().lower().partition("@")
+    return local_part == OUTBOUND_CAPTURE_LOCAL_PART and bool(separator and domain)
+
+
+def _has_external_recipient(*, config: EmailChannel, email: ParsedEmail) -> bool:
+    recipient_emails = {
+        recipient.email
+        for recipient in (*email.to_recipients, *email.cc_recipients)
+        if recipient.email and recipient.email != email.capture_address
+    }
+    if not recipient_emails:
+        return False
+
+    internal_emails = {
+        member_email.lower()
+        for member_email in OrganizationMembership.objects.filter(
+            organization_id=config.team.organization_id,
+            user__email__in=recipient_emails,
+            user__is_active=True,
+        ).values_list("user__email", flat=True)
+    }
+    internal_emails.add(config.from_email.lower())
+    if config.owner is not None:
+        internal_emails.add(config.owner.email.lower())
+    return bool(recipient_emails - internal_emails)
+
+
+@csrf_exempt
+def email_outbound_handler(request: HttpRequest) -> HttpResponse:
+    if request.method != "POST":
+        return HttpResponse(status=405)
+
+    token = request.POST.get("token", "")
+    timestamp = request.POST.get("timestamp", "")
+    signature = request.POST.get("signature", "")
+    if not validate_webhook_signature(token, timestamp, signature):
+        logger.warning("email_outbound_invalid_signature")
+        return HttpResponse("Invalid signature", status=403)
+
+    recipient = request.POST.get("recipient", "")
+    if not _is_outbound_capture_recipient(recipient):
+        logger.warning("email_outbound_invalid_recipient", recipient=recipient)
+        return HttpResponse("Invalid recipient", status=400)
+
+    sender = _parse_sender(request)
+    if not sender.email or not _outbound_sender_authenticated(request, sender.email):
+        logger.warning("email_outbound_unauthenticated_sender", sender_email=sender.email)
+        return HttpResponse(status=200)
+
+    config = (
+        EmailChannel.objects.select_related("team", "owner")
+        .filter(
+            kind=EmailChannelKind.CUSTOMER_COMMUNICATION,
+            from_email__iexact=sender.email,
+        )
+        .first()
+    )
+    if config is None:
+        if is_primary_region(request):
+            success = proxy_to_secondary_region(request, log_prefix="email_outbound", timeout=10)
+            return HttpResponse(status=200 if success else 502)
+        logger.info("email_outbound_unknown_sender", sender_email=sender.email)
+        return HttpResponse(status=200)
+
+    email = _parse_mailgun_email(request, config, recover_forwarded_sender=False)
+    if email is None:
+        logger.warning("email_outbound_no_message_id", team_id=config.team_id)
+        return HttpResponse(status=200)
+
+    if not _has_external_recipient(config=config, email=email):
+        logger.info("email_outbound_internal_only", team_id=config.team_id, config_id=str(config.id))
+        return HttpResponse(status=200)
+
+    result = ingest_customer_email(
+        team_id=config.team_id,
+        channel=config,
+        email=email,
+        direction=EmailThreadMessageDirection.OUTBOUND,
+    )
+    logger.info(
+        "customer_email_outbound_processed",
+        team_id=config.team_id,
+        config_id=str(config.id),
+        thread_id=str(result.thread_id),
+        message_id=str(result.message_id),
+        created=result.created,
+    )
+    return HttpResponse(status=200)
+
+
 @csrf_exempt
 def email_inbound_handler(request: HttpRequest) -> HttpResponse:
     if request.method != "POST":
@@ -547,13 +667,18 @@ def email_inbound_handler(request: HttpRequest) -> HttpResponse:
         logger.warning("email_inbound_unknown_token", inbound_token=inbound_token)
         return HttpResponse("Unknown recipient", status=404)
 
-    email = _parse_inbound_email(request, config)
+    email = _parse_mailgun_email(request, config, recover_forwarded_sender=True)
     if email is None:
         logger.warning("email_inbound_no_message_id", team_id=config.team_id)
         return HttpResponse(status=200)
 
     if config.kind == EmailChannelKind.CUSTOMER_COMMUNICATION:
-        result = ingest_customer_email(team_id=config.team_id, channel=config, email=email)
+        result = ingest_customer_email(
+            team_id=config.team_id,
+            channel=config,
+            email=email,
+            direction=EmailThreadMessageDirection.INBOUND,
+        )
         logger.info(
             "customer_email_inbound_processed",
             team_id=config.team_id,
