@@ -19633,7 +19633,8 @@ export namespace Schemas {
      * * `Pingdom` - Pingdom
      * * `Cloudflare` - Cloudflare
      * * `CosmosDB` - CosmosDB
-     * * `PlanetScale` - PlanetScale
+     * * `PlanetScaleMySQL` - PlanetScaleMySQL
+     * * `PlanetScalePostgres` - PlanetScalePostgres
      * * `SapHana` - SapHana
      * * `Rippling` - Rippling
      * * `HiBob` - HiBob
@@ -20922,7 +20923,8 @@ export namespace Schemas {
       Pingdom: 'Pingdom',
       Cloudflare: 'Cloudflare',
       CosmosDB: 'CosmosDB',
-      PlanetScale: 'PlanetScale',
+      PlanetScaleMySQL: 'PlanetScaleMySQL',
+      PlanetScalePostgres: 'PlanetScalePostgres',
       SapHana: 'SapHana',
       Rippling: 'Rippling',
       HiBob: 'HiBob',
@@ -22225,7 +22227,8 @@ export namespace Schemas {
        * * `Pingdom` - Pingdom
        * * `Cloudflare` - Cloudflare
        * * `CosmosDB` - CosmosDB
-       * * `PlanetScale` - PlanetScale
+       * * `PlanetScaleMySQL` - PlanetScaleMySQL
+       * * `PlanetScalePostgres` - PlanetScalePostgres
        * * `SapHana` - SapHana
        * * `Rippling` - Rippling
        * * `HiBob` - HiBob
@@ -24216,7 +24219,8 @@ export namespace Schemas {
        * * `Pingdom` - Pingdom
        * * `Cloudflare` - Cloudflare
        * * `CosmosDB` - CosmosDB
-       * * `PlanetScale` - PlanetScale
+       * * `PlanetScaleMySQL` - PlanetScaleMySQL
+       * * `PlanetScalePostgres` - PlanetScalePostgres
        * * `SapHana` - SapHana
        * * `Rippling` - Rippling
        * * `HiBob` - HiBob
@@ -31905,7 +31909,8 @@ export namespace Schemas {
        * * `Pingdom` - Pingdom
        * * `Cloudflare` - Cloudflare
        * * `CosmosDB` - CosmosDB
-       * * `PlanetScale` - PlanetScale
+       * * `PlanetScaleMySQL` - PlanetScaleMySQL
+       * * `PlanetScalePostgres` - PlanetScalePostgres
        * * `SapHana` - SapHana
        * * `Rippling` - Rippling
        * * `HiBob` - HiBob
@@ -33226,7 +33231,8 @@ export namespace Schemas {
        * * `Pingdom` - Pingdom
        * * `Cloudflare` - Cloudflare
        * * `CosmosDB` - CosmosDB
-       * * `PlanetScale` - PlanetScale
+       * * `PlanetScaleMySQL` - PlanetScaleMySQL
+       * * `PlanetScalePostgres` - PlanetScalePostgres
        * * `SapHana` - SapHana
        * * `Rippling` - Rippling
        * * `HiBob` - HiBob
@@ -69748,7 +69754,8 @@ export namespace Schemas {
        * * `Pingdom` - Pingdom
        * * `Cloudflare` - Cloudflare
        * * `CosmosDB` - CosmosDB
-       * * `PlanetScale` - PlanetScale
+       * * `PlanetScaleMySQL` - PlanetScaleMySQL
+       * * `PlanetScalePostgres` - PlanetScalePostgres
        * * `SapHana` - SapHana
        * * `Rippling` - Rippling
        * * `HiBob` - HiBob
@@ -71079,7 +71086,8 @@ export namespace Schemas {
        * * `Pingdom` - Pingdom
        * * `Cloudflare` - Cloudflare
        * * `CosmosDB` - CosmosDB
-       * * `PlanetScale` - PlanetScale
+       * * `PlanetScaleMySQL` - PlanetScaleMySQL
+       * * `PlanetScalePostgres` - PlanetScalePostgres
        * * `SapHana` - SapHana
        * * `Rippling` - Rippling
        * * `HiBob` - HiBob
@@ -72400,7 +72408,8 @@ export namespace Schemas {
        * * `Pingdom` - Pingdom
        * * `Cloudflare` - Cloudflare
        * * `CosmosDB` - CosmosDB
-       * * `PlanetScale` - PlanetScale
+       * * `PlanetScaleMySQL` - PlanetScaleMySQL
+       * * `PlanetScalePostgres` - PlanetScalePostgres
        * * `SapHana` - SapHana
        * * `Rippling` - Rippling
        * * `HiBob` - HiBob
@@ -80106,7 +80115,7 @@ export namespace Schemas {
 
     export type OrgOrganizationsBatchExportsLogsRetrieveParams = {
     /**
-     * Only return entries after this ISO 8601 timestamp.
+     * Only return entries after this ISO 8601 timestamp. Defaults to 7 days ago; pass an explicit value to read further back.
      */
     after?: string;
     /**
@@ -81171,7 +81180,7 @@ export namespace Schemas {
 
     export type BatchExportsRunsLogsRetrieveParams = {
     /**
-     * Only return entries after this ISO 8601 timestamp.
+     * Only return entries after this ISO 8601 timestamp. Defaults to 7 days ago; pass an explicit value to read further back.
      */
     after?: string;
     /**
@@ -81203,7 +81212,7 @@ export namespace Schemas {
 
     export type BatchExportsLogsRetrieveParams = {
     /**
-     * Only return entries after this ISO 8601 timestamp.
+     * Only return entries after this ISO 8601 timestamp. Defaults to 7 days ago; pass an explicit value to read further back.
      */
     after?: string;
     /**
@@ -82530,7 +82539,7 @@ export namespace Schemas {
 
     export type EndpointsLogsRetrieveParams = {
     /**
-     * Only return entries after this ISO 8601 timestamp.
+     * Only return entries after this ISO 8601 timestamp. Defaults to 7 days ago; pass an explicit value to read further back.
      */
     after?: string;
     /**
@@ -83694,7 +83703,7 @@ export namespace Schemas {
 
     export type ExternalDataSchemasLogsRetrieveParams = {
     /**
-     * Only return entries after this ISO 8601 timestamp.
+     * Only return entries after this ISO 8601 timestamp. Defaults to 7 days ago; pass an explicit value to read further back.
      */
     after?: string;
     /**
@@ -84003,7 +84012,7 @@ export namespace Schemas {
 
     export type FileDownloadBatchExportsLogsRetrieveParams = {
     /**
-     * Only return entries after this ISO 8601 timestamp.
+     * Only return entries after this ISO 8601 timestamp. Defaults to 7 days ago; pass an explicit value to read further back.
      */
     after?: string;
     /**
@@ -84373,7 +84382,7 @@ export namespace Schemas {
 
     export type HogFlowTemplatesLogsRetrieveParams = {
     /**
-     * Only return entries after this ISO 8601 timestamp.
+     * Only return entries after this ISO 8601 timestamp. Defaults to 7 days ago; pass an explicit value to read further back.
      */
     after?: string;
     /**
@@ -84531,7 +84540,7 @@ export namespace Schemas {
 
     export type HogFlowsLogsRetrieveParams = {
     /**
-     * Only return entries after this ISO 8601 timestamp.
+     * Only return entries after this ISO 8601 timestamp. Defaults to 7 days ago; pass an explicit value to read further back.
      */
     after?: string;
     /**
@@ -84761,7 +84770,7 @@ export namespace Schemas {
 
     export type HogFunctionsLogsRetrieveParams = {
     /**
-     * Only return entries after this ISO 8601 timestamp.
+     * Only return entries after this ISO 8601 timestamp. Defaults to 7 days ago; pass an explicit value to read further back.
      */
     after?: string;
     /**
