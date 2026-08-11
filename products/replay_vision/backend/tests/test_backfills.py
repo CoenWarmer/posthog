@@ -55,6 +55,7 @@ from products.replay_vision.backend.temporal.constants import (
 from products.replay_vision.backend.temporal.snapshots import BackfillScannerSnapshot
 from products.replay_vision.backend.temporal.sweep_types import CandidateSessionPayload
 from products.replay_vision.backend.temporal.types import CreateObservationInputs
+from products.replay_vision.backend.tests.helpers import seed_scanner_spend
 
 _WINDOW_END = dt.datetime(2026, 5, 1, tzinfo=dt.UTC)
 _WINDOW_START = _WINDOW_END - dt.timedelta(days=30)
@@ -157,6 +158,29 @@ class TestCreateObservationForBackfill:
         observation = backfill.observations.get()
         assert observation.scanner_snapshot["scanner_config"] == {"prompt": "frozen prompt"}
         assert observation.triggered_by == ObservationTrigger.BACKFILL
+
+    def test_scanner_limit_prices_the_backfill_observation_from_its_frozen_model(self) -> None:
+        # The frozen 15-credit model is what the observation charges; switching the scanner to a
+        # 2-credit model must not let it slip under a limit with only 5 credits left.
+        scanner = _make_scanner(credit_limit=20)
+        backfill = _make_backfill(scanner, scanner_snapshot=_frozen_snapshot(scanner))
+        seed_scanner_spend(scanner, 15)
+        ReplayScanner.objects.filter(pk=scanner.pk).update(model=ScannerModel.GEMINI_3_5_FLASH_LITE)
+        scanner.refresh_from_db()
+        result = create_observation_activity(
+            CreateObservationInputs(
+                scanner_id=scanner.id,
+                team_id=scanner.team_id,
+                session_id="sess-frozen-price",
+                triggered_by=ObservationTrigger.BACKFILL,
+                triggered_by_user_id=None,
+                workflow_id="wf-frozen-price",
+                backfill_id=backfill.id,
+            )
+        )
+        assert result.observation_id is None
+        assert not result.was_created
+        assert not backfill.observations.exists()
 
     def test_cancelled_backfill_skips_creation(self) -> None:
         scanner = _make_scanner()
