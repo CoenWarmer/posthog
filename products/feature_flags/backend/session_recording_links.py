@@ -32,6 +32,30 @@ def teams_linking_flag(feature_flag: FeatureFlag) -> QuerySet[Team]:
     )
 
 
+def replay_linked_flag_ids(project_id: int) -> set[int]:
+    """Every flag id a team in this project gates session recording on.
+
+    One query for the whole project, for callers checking many flags at once. `teams_linking_flag`
+    is the per-flag equivalent; calling it in a loop is a query per flag.
+    """
+    stored = (
+        Team.objects.filter(project_id=project_id)
+        .exclude(session_recording_linked_flag__isnull=True)
+        .values_list("session_recording_linked_flag", flat=True)
+    )
+
+    flag_ids: set[int] = set()
+    for linked_flag in stored:
+        if not isinstance(linked_flag, dict):
+            continue
+        flag_id = linked_flag.get("id")
+        # `bool` subclasses `int` and `True == 1`, so an unchecked `{"id": true}` would read as a
+        # link to flag 1 and block deleting it.
+        if isinstance(flag_id, int) and not isinstance(flag_id, bool):
+            flag_ids.add(flag_id)
+    return flag_ids
+
+
 def update_linked_flag_key(team: Team, new_key: str) -> None:
     """Rewrite the stored key on a team's replay link, leaving teams that already match alone."""
     linked_flag = team.session_recording_linked_flag
