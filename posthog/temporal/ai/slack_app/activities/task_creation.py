@@ -1,6 +1,7 @@
 import re
 import uuid
 import textwrap
+from dataclasses import dataclass
 from typing import Any
 
 from django.db import models
@@ -34,7 +35,7 @@ _INITIATOR_PLACEHOLDER = "<original user message was here>"
 # Shared between the full and message+charts variants: charts post by PostHog-hosted url
 # on chat:write alone, so they're offered whenever the rollout flag is on.
 _SLACK_CHART_DELIVERY_BULLETS = """- When an analytics answer is naturally visual (a trend over time, funnel, breakdown comparison, retention curve), deliver a chart image by default alongside the summary — don't wait for the user to say "chart". Skip the image only when the result is a single number, a short list, or the user asked for raw data.
-- To show a chart in Slack (a saved insight or an ad-hoc analytics query result), make a single call: POST to `$POSTHOG_API_URL/api/projects/$POSTHOG_PROJECT_ID/tasks/$POSTHOG_TASK_ID/runs/$POSTHOG_TASK_RUN_ID/living_artifacts/chart/` with `$POSTHOG_PERSONAL_API_KEY` and body `{"name": "<chart title>", "query": <query JSON, e.g. {"kind": "InsightVizNode", "source": {"kind": "TrendsQuery", ...}}>}`, or `{"name": "<chart title>", "insight_id": <numeric insight id>}` for a saved insight. The chart renders directly under your answer text with its name as the title, so don't restate the title or announce the chart ("Here's a chart of…") — spend your answer text on the takeaway instead: the trend, inflection points, spikes, or drops a reader should notice, with numbers where they matter. It renders the chart server-side and registers it for Slack delivery in one step, blocking until done (typically a few seconds). On a 400, read the `error` field and report the failure rather than retrying blindly. Do not download, view, or re-upload the image yourself. Each chart is delivered with an "Open in PostHog" button, so do not paste the response `url` into your answer unless the user explicitly asks for a link.
+- To show a chart in Slack (a saved insight or an ad-hoc analytics query result), make a single call: POST to `$POSTHOG_API_URL/api/projects/$POSTHOG_PROJECT_ID/tasks/$POSTHOG_TASK_ID/runs/$POSTHOG_TASK_RUN_ID/living_artifacts/chart/` with `$POSTHOG_PERSONAL_API_KEY` and body `{"name": "<chart title>", "query": <query JSON, e.g. {"kind": "InsightVizNode", "source": {"kind": "TrendsQuery", ...}}>}`, or `{"name": "<chart title>", "insight_id": <numeric insight id>}` for a saved insight. The chart renders directly under your answer text with its name as the title, so don't restate the title or announce the chart ("Here's a chart of…") — spend your answer text on the takeaway instead: the trend, inflection points, spikes, or drops a reader should notice, with numbers where they matter. It renders the chart server-side and registers it for Slack delivery in one step, blocking until done (typically a few seconds). Report a failure rather than retrying blindly: a 400 carries the reason in `error`, or in `detail` when the request body itself was rejected, and a 429 means the project's chart render limit is saturated, so answer without the chart instead of retrying. Do not download, view, or re-upload the image yourself. Each chart is delivered with an "Open in PostHog" button, so do not paste the response `url` into your answer unless the user explicitly asks for a link.
 - SQL results can't be charted yet — the chart endpoint rejects SQL queries. Chart with an insight query (e.g. TrendsQuery) when the question can be expressed as one; otherwise summarize the SQL result in your answer text."""
 
 _SLACK_DELIVERY_CONSTRAINTS = (
@@ -86,9 +87,15 @@ _SLACK_DELIVERY_CONSTRAINTS_TEXT_ONLY = """Slack delivery constraints:
 _SLACK_CANVAS_FILE_ADAPTER_SCOPES = frozenset({"canvases:write", "files:write"})
 
 
-def _artifact_delivery_capabilities(integration: Integration) -> tuple[bool, bool]:
-    """``(chart, canvas_file)`` delivery availability, from one rollout-flag read
-    so the two prompt offers can't be derived from divergent flag evaluations.
+@dataclass(frozen=True, kw_only=True)
+class _ArtifactDeliveryCapabilities:
+    chart: bool
+    canvas_file: bool
+
+
+def _artifact_delivery_capabilities(integration: Integration) -> _ArtifactDeliveryCapabilities:
+    """Delivery availability for both prompt offers, from one rollout-flag read
+    so they can't be derived from divergent flag evaluations.
 
     Chart cards post by PostHog-hosted url and work on chat:write alone, so the
     flag is all they need. Canvas/file delivery additionally requires the Slack
@@ -99,8 +106,10 @@ def _artifact_delivery_capabilities(integration: Integration) -> tuple[bool, boo
     from products.slack_app.backend.feature_flags import is_slack_app_canvas_file_artifacts_enabled  # noqa: PLC0415
 
     chart = is_slack_app_canvas_file_artifacts_enabled(integration)
-    canvas_file = chart and not SlackIntegration(integration).missing_scopes(_SLACK_CANVAS_FILE_ADAPTER_SCOPES)
-    return chart, canvas_file
+    return _ArtifactDeliveryCapabilities(
+        chart=chart,
+        canvas_file=chart and not SlackIntegration(integration).missing_scopes(_SLACK_CANVAS_FILE_ADAPTER_SCOPES),
+    )
 
 
 # Cap on how many messages a single follow-up update block can carry. Threads with
@@ -640,8 +649,10 @@ def create_posthog_code_task_for_repo_activity(
     from products.slack_app.backend.feature_flags import is_slack_app_living_artifacts_enabled  # noqa: PLC0415
 
     living_artifacts_enabled = is_slack_app_living_artifacts_enabled(integration)
-    chart_delivery, canvas_file_delivery = (
-        _artifact_delivery_capabilities(integration) if living_artifacts_enabled else (False, False)
+    delivery = (
+        _artifact_delivery_capabilities(integration)
+        if living_artifacts_enabled
+        else _ArtifactDeliveryCapabilities(chart=False, canvas_file=False)
     )
 
     description = _build_posthog_code_task_description(
@@ -650,8 +661,8 @@ def create_posthog_code_task_for_repo_activity(
         user_message_ts,
         mentioner_slack_user_id=slack_user_id,
         mentioner_display_name=mentioner_display_name,
-        canvas_file_artifacts_enabled=canvas_file_delivery,
-        chart_artifacts_enabled=chart_delivery,
+        canvas_file_artifacts_enabled=delivery.canvas_file,
+        chart_artifacts_enabled=delivery.chart,
         living_artifacts_enabled=living_artifacts_enabled,
     )
 

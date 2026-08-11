@@ -171,7 +171,9 @@ def test_artifact_delivery_capabilities(flag_enabled, granted_scopes, expected_c
         "products.slack_app.backend.feature_flags.is_slack_app_canvas_file_artifacts_enabled",
         return_value=flag_enabled,
     ) as flag_check:
-        assert _artifact_delivery_capabilities(integration) == (expected_chart, expected_canvas_file)
+        capabilities = _artifact_delivery_capabilities(integration)
+    assert capabilities.chart is expected_chart
+    assert capabilities.canvas_file is expected_canvas_file
     assert flag_check.call_count == 1
 
 
@@ -371,6 +373,14 @@ def test_build_description_snapshot_matches(snapshot):
         canvas_file_artifacts_enabled=True,
     )
     assert out == snapshot
+
+
+def test_message_and_charts_constraints_snapshot_matches(snapshot):
+    # This variant is assembled by concatenating blocks around
+    # _SLACK_CHART_DELIVERY_BULLETS, so a dropped bullet or a lost newline between
+    # blocks would still satisfy the substring assertions above. The full variant is
+    # pinned through the rendered-prompt snapshot; this pins the other composed one.
+    assert _SLACK_DELIVERY_CONSTRAINTS_MESSAGE_AND_CHARTS == snapshot
 
 
 class TestBuildThreadContextUpdateBlock:
