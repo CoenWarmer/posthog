@@ -325,42 +325,45 @@ def delete_batch_exports(team_ids: list[int]):
             )
 
 
-def delete_data_modeling_schedules(team_ids: list[int]) -> None:
-    """Delete Temporal schedules for data modeling saved queries in deleted teams.
+class DataModelingScheduleTeardownError(Exception):
+    pass
 
-    Django CASCADE deletes the DataWarehouseSavedQuery records but doesn't
-    call revert_materialization(), leaving orphaned Temporal schedules.
+
+def delete_data_modeling_schedules(team_ids: list[int]) -> None:
+    """Delete Temporal schedules for data modeling in deleted teams.
+
+    Django CASCADE deletes the DataWarehouseSavedQuery and DAG records but doesn't
+    call revert_materialization(), leaving orphaned Temporal schedules. Teams run
+    either per-saved-query schedules or per-DAG ones, so both are swept here.
     """
     import temporalio.service
 
     from posthog.temporal.common.schedule import delete_schedule
 
-    from products.data_modeling.backend.facade.models import DataWarehouseSavedQuery
+    from products.data_modeling.backend.facade.api import delete_dag_schedules
+    from products.data_modeling.backend.facade.models import DAG, DataWarehouseSavedQuery
 
-    saved_queries = list(
-        DataWarehouseSavedQuery.objects.filter(
-            team_id__in=team_ids,
-            sync_frequency_interval__isnull=False,
-        ).exclude(deleted=True)  # as it's nullable
-    )
+    failed = 0
 
-    if not saved_queries:
-        return
+    saved_queries = list(DataWarehouseSavedQuery.objects.filter(team_id__in=team_ids).exclude(deleted=True))
+    if saved_queries:
+        temporal = sync_connect()
+        for saved_query in saved_queries:
+            try:
+                delete_schedule(temporal, schedule_id=str(saved_query.id))
+            except temporalio.service.RPCError as e:
+                if e.status == temporalio.service.RPCStatusCode.NOT_FOUND:
+                    continue
+                failed += 1
+                capture_exception(e)
 
-    temporal = sync_connect()
+    for dag_id in DAG.objects.filter(team_id__in=team_ids).values_list("id", flat=True):
+        if not delete_dag_schedules(str(dag_id)).ok:
+            failed += 1
 
-    for saved_query in saved_queries:
-        try:
-            delete_schedule(temporal, schedule_id=str(saved_query.id))
-        except temporalio.service.RPCError as e:
-            if e.status == temporalio.service.RPCStatusCode.NOT_FOUND:
-                logger.warning(
-                    "Data modeling schedule not found during team deletion",
-                    schedule_id=str(saved_query.id),
-                    team_id=saved_query.team_id,
-                )
-                continue
-            capture_exception(e)
+    if failed:
+        # Raise so the activity retries: a schedule left behind here fires forever with no owner.
+        raise DataModelingScheduleTeardownError(f"Failed to delete {failed} data modeling schedules")
 
 
 def delete_team_records(team_ids: list[int]) -> None:
