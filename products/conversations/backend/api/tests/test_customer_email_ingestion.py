@@ -1,3 +1,5 @@
+import json
+
 from posthog.test.base import BaseTest
 from unittest.mock import patch
 
@@ -90,7 +92,7 @@ class TestCustomerEmailIngestion(BaseTest):
             "subject": "Account update",
             "stripped-text": "Here is your account update.",
             "body-plain": "Here is your account update.",
-            "X-Mailgun-Spf": "pass",
+            "message-headers": json.dumps([["X-Mailgun-Spf", "Pass"]]),
         }
         data.update(overrides)
         return self.client.post("/api/conversations/v1/email/capture", data)

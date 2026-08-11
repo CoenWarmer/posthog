@@ -1,6 +1,7 @@
 """Email webhook endpoints for Mailgun routes."""
 
 import re
+import json
 from datetime import UTC, datetime
 from email.utils import getaddresses, parseaddr, parsedate_to_datetime
 from typing import Any, cast
@@ -237,6 +238,30 @@ def _recover_dmarc_rewritten_sender(
     return sender_email, sender_name
 
 
+def _mailgun_message_header(request: HttpRequest, name: str) -> str:
+    direct_value = request.POST.get(name, "")
+    if direct_value:
+        return direct_value
+
+    raw_headers = request.POST.get("message-headers", "")
+    if not raw_headers:
+        return ""
+    try:
+        parsed_headers: object = json.loads(raw_headers)
+    except (TypeError, ValueError):
+        return ""
+    if not isinstance(parsed_headers, list):
+        return ""
+
+    for header in parsed_headers:
+        if not isinstance(header, list) or len(header) < 2:
+            continue
+        header_name, header_value = header[0], header[1]
+        if isinstance(header_name, str) and isinstance(header_value, str) and header_name.lower() == name.lower():
+            return header_value
+    return ""
+
+
 def _sender_authenticated(request: HttpRequest, sender_email: str) -> bool:
     """Verify the From header domain is authenticated before trusting it for identity.
 
@@ -253,7 +278,7 @@ def _sender_authenticated(request: HttpRequest, sender_email: str) -> bool:
     An attacker signing with evil.com's key but forging From: teammate@posthog.com
     would still get DKIM Pass.
     """
-    spf_passed = request.POST.get("X-Mailgun-Spf", "").lower() == "pass"
+    spf_passed = _mailgun_message_header(request, "X-Mailgun-Spf").lower() == "pass"
     if not spf_passed:
         return False
     envelope_sender = request.POST.get("sender", "")
