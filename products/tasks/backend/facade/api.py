@@ -43,6 +43,7 @@ from posthog.utils import absolute_uri
 
 from products.tasks.backend.constants import (
     AGENT_OTEL_TELEMETRY_STATE_KEY,
+    AGENT_PEER_MESSAGING_FEATURE_FLAG,
     MAX_CUSTOM_IMAGES_PER_TEAM,
     MAX_CUSTOM_IMAGES_PER_USER,
     PI_CLOUD_RUNTIME_FEATURE_FLAG,
@@ -199,8 +200,10 @@ __all__ = [
     "list_sandbox_custom_images",
     "list_sandbox_environments",
     "sandbox_custom_images_enabled",
+    "agent_peer_messaging_enabled",
     "list_task_automations",
     "list_task_run_living_artifacts",
+    "list_task_run_peers",
     "list_task_repositories",
     "list_task_runs",
     "list_tasks",
@@ -225,6 +228,7 @@ __all__ = [
     "set_task_title",
     "slack_actor_state_updates",
     "signal_report_queryset",
+    "signal_task_run_peer_message",
     "signal_task_run_user_message",
     "signal_workflow_completion",
     "soft_delete_task",
@@ -3413,6 +3417,146 @@ def signal_task_run_user_message(
             return False
         raise
     return True
+
+
+# --- Agent peer messaging (docs: logic/services/peer_messages.py) ---
+
+
+def agent_peer_messaging_enabled(team: Team, user: User) -> bool:
+    """Whether agent-to-agent peer messaging is enabled for this team/user. v1
+    callers additionally require the Pi runtime on the sender task."""
+    distinct_id = user.distinct_id or f"user_{user.id}"
+    organization_id = str(team.organization_id)
+    try:
+        return bool(
+            posthoganalytics.feature_enabled(
+                AGENT_PEER_MESSAGING_FEATURE_FLAG,
+                distinct_id,
+                groups={"organization": organization_id},
+                group_properties={"organization": {"id": organization_id}},
+                only_evaluate_locally=False,
+                send_feature_flag_events=False,
+            )
+        )
+    except Exception:
+        logger.exception("agent peer messaging flag check failed; treating as disabled")
+        return False
+
+
+def list_task_run_peers(run_id: str | UUID, task_id: str | UUID, team_id: int) -> list[contracts.TaskRunPeerDTO] | None:
+    """Peer agent runs the given run may message. ``None`` when the run isn't found.
+
+    Discovery and send validation share one visibility policy
+    (``peer_messages.visible_peer_runs``), so an agent can only message what it can
+    list; the per-entry ``sendable`` flag is the liveness contract — clients never
+    infer eligibility from status labels.
+    """
+    from products.tasks.backend.logic.services import (
+        peer_messages,  # noqa: PLC0415 — keep storage deps off the api import path
+    )
+
+    run = _get_visible_run(run_id, task_id, team_id)
+    if run is None:
+        return None
+    return [contracts.TaskRunPeerDTO(**entry) for entry in peer_messages.list_peer_run_entries(run)]
+
+
+def signal_task_run_peer_message(
+    run_id: str | UUID,
+    task_id: str | UUID,
+    team_id: int,
+    *,
+    target_run_id: str,
+    content: str,
+    artifact_ids: list[str],
+) -> contracts.PeerMessageSendResultDTO | None:
+    """Send a peer message from one agent run to another. ``None`` when the sender
+    run isn't found.
+
+    Unlike ``signal_task_run_user_message`` this composes the signal context
+    entirely server-side (``kind``/``peer_message_id``/``from_run_id``/``from_task_id``,
+    never reserved actor keys, never merged from agent input) and carries no
+    ``actor_user_id`` — the delivery activity's peer mode preserves the recipient's
+    already-bound credential identity. The synchronous result means ``accepted``,
+    never "delivered": the sandbox handoff happens later inside the target workflow,
+    which records the delivery outcome on the message row.
+    """
+    from temporalio.service import RPCError, RPCStatusCode  # noqa: PLC0415 — keep temporalio off the api import path
+
+    from products.tasks.backend.logic.services import (
+        peer_messages,  # noqa: PLC0415 — keep storage deps off the api import path
+    )
+    from products.tasks.backend.models import AgentPeerMessage  # noqa: PLC0415
+    from products.tasks.backend.temporal.client import (  # noqa: PLC0415 — keep temporalio off the api import path
+        signal_task_followup_message,
+    )
+
+    sender_run = _get_visible_run(run_id, task_id, team_id)
+    if sender_run is None:
+        return None
+
+    prepared = peer_messages.validate_and_prepare_peer_message(sender_run, target_run_id, content, artifact_ids)
+    if isinstance(prepared, peer_messages.PeerMessageRejection):
+        return contracts.PeerMessageSendResultDTO(result="rejected", detail=prepared.detail)
+    message, target_artifact_ids, target_run = prepared
+
+    envelope = peer_messages.compose_peer_envelope(sender_run, content)
+    context = peer_messages.build_peer_message_context(message)
+    try:
+        signal_task_followup_message(
+            target_run.workflow_id,
+            envelope,
+            target_artifact_ids,
+            str(message.id),
+            None,
+            context,
+            steer=False,
+        )
+    except RPCError as e:
+        if e.status == RPCStatusCode.NOT_FOUND:
+            peer_messages.mark_peer_message_outcome(
+                str(message.id),
+                AgentPeerMessage.Outcome.TARGET_FINISHED,
+                failure_phase="signal",
+                failure_detail="target workflow gone",
+            )
+            return contracts.PeerMessageSendResultDTO(
+                result="target_finished",
+                detail="The target run has already finished; it can no longer receive messages.",
+                message_id=str(message.id),
+            )
+        peer_messages.mark_peer_message_outcome(
+            str(message.id),
+            AgentPeerMessage.Outcome.DELIVERY_FAILED,
+            failure_phase="signal",
+            failure_detail=str(e),
+        )
+        return contracts.PeerMessageSendResultDTO(
+            result="rejected",
+            detail="Signaling the target run failed. Try again shortly.",
+            message_id=str(message.id),
+        )
+    except Exception as e:
+        # Terminalize before surfacing: an accepted row left behind would hold the
+        # target's queue capacity for the whole delivery window.
+        peer_messages.mark_peer_message_outcome(
+            str(message.id),
+            AgentPeerMessage.Outcome.DELIVERY_FAILED,
+            failure_phase="signal",
+            failure_detail=str(e),
+        )
+        return contracts.PeerMessageSendResultDTO(
+            result="rejected",
+            detail="Signaling the target run failed. Try again shortly.",
+            message_id=str(message.id),
+        )
+
+    peer_messages.mark_peer_message_signaled(str(message.id))
+    return contracts.PeerMessageSendResultDTO(
+        result="accepted",
+        detail="Message accepted for delivery. It will reach the target as a queued turn; delivery is not confirmed synchronously.",
+        message_id=str(message.id),
+    )
 
 
 def get_task_run_sandbox_connection(

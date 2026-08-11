@@ -12,6 +12,7 @@ from posthog.temporal.common.utils import asyncify, close_db_connections
 
 from products.tasks.backend.constants import (
     AGENT_OTEL_TELEMETRY_STATE_KEY,
+    AGENT_PEER_MESSAGING_FEATURE_FLAG,
     AGENT_PROXY_KEEP_STREAM_OPEN_FEATURE_FLAG,
     CONTINUE_AS_NEW_FEATURE_FLAG,
     MODAL_DIRECTORY_RESUME_SNAPSHOTS_FEATURE_FLAG,
@@ -109,6 +110,9 @@ class TaskProcessingContext:
     # Captured at workflow start so the continue_as_new trigger is deterministic across replay.
     continue_as_new_enabled: bool = False
     continue_as_new_history_threshold: int = 0
+    # Whether agent peer messaging tools should surface in this run (flag + Pi runtime).
+    # Exposure only: the peers endpoints re-check authorization server-side on every call.
+    peer_messaging_enabled: bool = False
 
     @property
     def mode(self) -> str:
@@ -320,6 +324,36 @@ def _is_agent_proxy_keep_stream_open_enabled(
         run_id=run_id,
         agent_proxy_keep_stream_open=enabled,
     )
+    return enabled
+
+
+def _is_peer_messaging_enabled(
+    *,
+    distinct_id: str,
+    organization_id: str,
+    run_id: str,
+) -> bool:
+    """Whether the agent peer-messaging tools should surface in the sandbox.
+
+    Fail-closed exposure gate only — the peers list/message endpoints enforce the
+    flag and runtime again server-side, so a stale env var in a resumed sandbox
+    can never authorize anything."""
+    try:
+        enabled = bool(
+            posthoganalytics.feature_enabled(
+                AGENT_PEER_MESSAGING_FEATURE_FLAG,
+                distinct_id=distinct_id,
+                groups={"organization": organization_id},
+                group_properties={"organization": {"id": organization_id}},
+                only_evaluate_locally=False,
+                send_feature_flag_events=False,
+            )
+        )
+    except Exception as e:
+        log_with_activity_context("peer_messaging_flag_check_failed", run_id=run_id, error=str(e))
+        return False
+    if enabled:
+        log_with_activity_context("peer_messaging_flag_checked", run_id=run_id, peer_messaging_enabled=True)
     return enabled
 
 
@@ -1026,4 +1060,12 @@ def get_task_processing_context(input: GetTaskProcessingContextInput) -> TaskPro
             run_id=run_id,
         ),
         continue_as_new_history_threshold=settings.TASKS_CONTINUE_AS_NEW_HISTORY_THRESHOLD,
+        # v1 scopes peer messaging to Pi runs; the flag check is skipped elsewhere
+        # so ACP runs never even evaluate it.
+        peer_messaging_enabled=task.runtime == Task.Runtime.PI
+        and _is_peer_messaging_enabled(
+            distinct_id=distinct_id,
+            organization_id=organization_id,
+            run_id=run_id,
+        ),
     )

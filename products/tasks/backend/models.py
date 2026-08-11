@@ -2447,6 +2447,64 @@ class TaskRun(models.Model):
         raise Exception("Cannot delete TaskRun. Task runs are immutable records.")
 
 
+class AgentPeerMessage(TeamScopedRootMixin):
+    """One agent-to-agent message between two cloud task runs, relayed through the
+    control plane (see logic/services/peer_messages.py). The row is both the audit
+    record and the target run's queue-capacity unit: ``outcome`` advances
+    accepted → signaled → delivered, with terminals rejected / duplicate /
+    target_finished / delivery_failed. Synchronous states are set by the send path;
+    delivery states by the follow-up activity — a non-terminal row past the delivery
+    window counts as expired for capacity, so a lost activity can't wedge the cap.
+    ``content`` is the sender-authored body only; the delivered text wraps it in a
+    server-composed envelope that is never persisted here."""
+
+    class Outcome(models.TextChoices):
+        ACCEPTED = "accepted", "Accepted"
+        SIGNALED = "signaled", "Signaled"
+        DELIVERED = "delivered", "Delivered"
+        REJECTED = "rejected", "Rejected"
+        DUPLICATE = "duplicate", "Duplicate"
+        TARGET_FINISHED = "target_finished", "Target finished"
+        DELIVERY_FAILED = "delivery_failed", "Delivery failed"
+
+    NON_TERMINAL_OUTCOMES = (Outcome.ACCEPTED, Outcome.SIGNALED)
+
+    # nosemgrep: prefer-uuid7-django-pk -- mirrors sibling task models in this app
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    # db_constraint=False on the team/user FKs: adding an FK constraint to those hot tables
+    # locks them and stalls deploys; Django still enforces the relation and on_delete at the
+    # app level (see safe-django-migrations.md).
+    team = models.ForeignKey("posthog.Team", on_delete=models.CASCADE, related_name="+", db_constraint=False)
+    sender_run = models.ForeignKey(TaskRun, on_delete=models.CASCADE, related_name="sent_peer_messages")
+    target_run = models.ForeignKey(TaskRun, on_delete=models.CASCADE, related_name="received_peer_messages")
+    # The sender task's creating user — attribution for rendering and per-user throttles.
+    # Redundant under same-user visibility, load-bearing once visibility widens team-wide.
+    sender_user = models.ForeignKey(
+        "posthog.User", on_delete=models.SET_NULL, null=True, blank=True, related_name="+", db_constraint=False
+    )
+    content = models.TextField()
+    # Target-side artifact ids (post copy-on-send); sender-side ids are never delivered.
+    artifact_ids = models.JSONField(default=list, blank=True)
+    outcome = models.CharField(max_length=20, choices=Outcome, default=Outcome.ACCEPTED)
+    # Phase a terminal row failed in (queue_cap, artifact_copy, signal, credential_refresh, ...).
+    failure_phase = models.CharField(max_length=50, blank=True, default="")
+    failure_detail = models.TextField(blank=True, default="")
+    created_at = models.DateTimeField(default=django_timezone.now)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "posthog_agent_peer_message"
+        indexes = [
+            # Queue-cap query: non-terminal rows for a target within the delivery window.
+            models.Index(fields=["target_run", "outcome", "created_at"], name="peer_msg_target_outcome_idx"),
+            # Sender-side throttle windows.
+            models.Index(fields=["sender_run", "created_at"], name="peer_msg_sender_created_idx"),
+        ]
+
+    def __str__(self):
+        return f"Peer message {self.id}: run {self.sender_run_id} → run {self.target_run_id} ({self.outcome})"
+
+
 class TaskArtifact(TeamScopedRootMixin, UUIDModel):
     class ArtifactType(models.TextChoices):
         SLACK_MESSAGE = "slack_message", "Slack message"
