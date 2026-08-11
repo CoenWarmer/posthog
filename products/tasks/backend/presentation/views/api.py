@@ -59,6 +59,7 @@ from products.tasks.backend.facade import (
     contracts as tasks_contracts,
 )
 from products.tasks.backend.facade.access import usage_limit_response
+from products.tasks.backend.facade.billing import get_task_usage
 from products.tasks.backend.facade.client_provenance import get_task_client_provenance
 from products.tasks.backend.facade.metrics import (
     StreamConnectionOutcome,
@@ -78,7 +79,6 @@ from products.tasks.backend.facade.streams import (
     get_task_run_stream_key,
     run_uses_dedicated_stream,
 )
-from products.tasks.backend.logic.services.task_usage import get_task_usage
 from products.tasks.backend.presentation.serializers import (
     CodeInviteRedeemRequestSerializer,
     ConnectionTokenResponseSerializer,
