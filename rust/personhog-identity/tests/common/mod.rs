@@ -158,6 +158,17 @@ impl personhog_identity::storage::IdentityStorage for UnusedStorage {
         panic!("not exercised by this test")
     }
 
+    async fn get_distinct_ids_for_persons(
+        &self,
+        _team_id: i64,
+        _person_ids: &[i64],
+        _limit_per_person: Option<i64>,
+    ) -> personhog_identity::storage::StorageResult<
+        Vec<personhog_identity::storage::DistinctIdMapping>,
+    > {
+        panic!("not exercised by this test")
+    }
+
     async fn create_person_stubs(
         &self,
         _stubs: &[personhog_identity::storage::PersonStub],
